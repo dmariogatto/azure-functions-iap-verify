@@ -42,7 +42,7 @@ namespace Iap.Verify
                 log.LogError(ex, $"Failed to parse {nameof(AppleReceipt)}");
             }
                        
-            if (string.IsNullOrEmpty(receipt?.AppBundleId) ||
+            if (string.IsNullOrEmpty(receipt?.BundleId) ||
                 string.IsNullOrEmpty(receipt?.ProductId) ||
                 string.IsNullOrEmpty(receipt?.TransactionId) ||
                 string.IsNullOrEmpty(receipt?.Token))
@@ -106,9 +106,9 @@ namespace Iap.Verify
             }
 
             var bundleId = result.Receipt.Property("bundle_id").Value.Value<string>();
-            if (receipt.AppBundleId != bundleId)
+            if (receipt.BundleId != bundleId)
             {
-                log.LogInformation($"IAP invalid, bundle id '{bundleId ?? string.Empty}' does not match {receipt.AppBundleId}!");
+                log.LogInformation($"IAP invalid, bundle id '{bundleId ?? string.Empty}' does not match {receipt.BundleId}!");
                 return new BadRequestResult();
             }
 
@@ -146,9 +146,9 @@ namespace Iap.Verify
             }
 
             var bundleId = result.LatestReceiptInfo.Property("bid").Value.Value<string>();
-            if (receipt.AppBundleId != bundleId)
+            if (receipt.BundleId != bundleId)
             {
-                log.LogInformation($"IAP AutoRenew invalid, bundle id '{bundleId ?? string.Empty}' does not match {receipt.AppBundleId}!");
+                log.LogInformation($"IAP AutoRenew invalid, bundle id '{bundleId ?? string.Empty}' does not match {receipt.BundleId}!");
                 return new BadRequestResult();
             }
             
