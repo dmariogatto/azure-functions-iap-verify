@@ -11,6 +11,9 @@ using Iap.Verify.Models;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.AndroidPublisher.v3;
 using Google.Apis.Services;
+using Iap.Verify.Tables;
+using Iap.Verify.Tables.Entities;
+using Microsoft.WindowsAzure.Storage.Table;
 
 namespace Iap.Verify
 {
@@ -86,6 +89,8 @@ namespace Iap.Verify
                 result = new ValidationResult(false, $"Invalid {nameof(Receipt)}");
             }
 
+            await SaveLog(receipt, result, log);
+
             if (result.IsValid)
             {
                 log.LogInformation($"Validated IAP '{receipt.BundleId}':'{receipt.ProductId}'");
@@ -149,6 +154,13 @@ namespace Iap.Verify
                 {
                     result = new ValidationResult(false, "DeveloperPayload did not match");
                 }
+                else if (!purchaseState.ExpiryTimeMillis.HasValue ||
+                         DateTime.UnixEpoch
+                                 .AddMilliseconds(purchaseState.ExpiryTimeMillis.Value)
+                                 .AddDays(3).Date <= DateTime.UtcNow.Date)
+                {
+                    result = new ValidationResult(false, $"subscription expiried {purchaseState.ExpiryTimeMillis ?? -1}");
+                }
                 else
                 {
                     result = new ValidationResult(true);
@@ -161,6 +173,22 @@ namespace Iap.Verify
             }
 
             return result;
+        }
+
+        private static async Task SaveLog(Receipt receipt, ValidationResult validationResult, ILogger log)
+        {
+            try
+            {
+                var table = Storage.GetGoogleTable();
+                var entity = new Verification(receipt, validationResult);
+                await table.CreateIfNotExistsAsync().ConfigureAwait(false);
+                var insertOp = TableOperation.Insert(entity);
+                await table.ExecuteAsync(insertOp).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                log.LogError("Failed to save log", ex);
+            }
         }
     }
 }

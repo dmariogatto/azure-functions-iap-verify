@@ -12,6 +12,9 @@ using Iap.Verify.Models;
 using Newtonsoft.Json.Linq;
 using System.Linq;
 using Newtonsoft.Json.Serialization;
+using Iap.Verify.Tables;
+using Iap.Verify.Tables.Entities;
+using Microsoft.WindowsAzure.Storage.Table;
 
 namespace Iap.Verify
 {
@@ -58,9 +61,7 @@ namespace Iap.Verify
 
                 if (appleResponse?.IsValid == true)
                 {
-                    result = appleResponse.IsAutoRenew
-                        ? ValidateSubscription(receipt, appleResponse, log)
-                        : ValidateProduct(receipt, appleResponse, log);
+                    result = ValidateProduct(receipt, appleResponse, log);
                 }
                 else if (!string.IsNullOrEmpty(appleResponse?.Error))
                 {
@@ -75,6 +76,8 @@ namespace Iap.Verify
             {
                 result = new ValidationResult(false, $"Invalid {nameof(Receipt)}");
             }
+
+            await SaveLog(receipt, result, log);
 
             if (result.IsValid)
             {
@@ -139,19 +142,30 @@ namespace Iap.Verify
                 }
                 else
                 {
-                    var purchases = appleResponse.Receipt.Property("in_app").Value.Value<JArray>();
+                    var purchases = appleResponse.LatestReceiptInfo?.Count > 0
+                        ? appleResponse.LatestReceiptInfo
+                        : appleResponse.Receipt.Property("in_app").Value.Value<JArray>();
                     var purchase = purchases?.Count > 0
-                        ? purchases.OfType<JObject>().FirstOrDefault(p => p.Property("product_id").Value.Value<string>() == receipt.ProductId)
-                        : default;
+                        ? purchases.OfType<JObject>().LastOrDefault(p => p.Property("product_id").Value.Value<string>() == receipt.ProductId)
+                        : null;
 
-                    if (purchase == default)
+                    if (purchase == null)
                     {
                         result = new ValidationResult(false, $"did not find '{receipt.ProductId}' in list of purchases");
                     }
-                    else if (purchase.Property("transaction_id").Value.Value<string>() is string transId &&
+                    else if (purchase.Property("original_transaction_id").Value.Value<string>() is string transId &&
                              receipt.TransactionId != transId)
                     {
                         result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{transId}'");
+                    }
+                    else if (purchase.Property("expires_date_ms")?.Value?.Value<string>() is string expiryMs &&
+                             long.TryParse(expiryMs, out var expiryMsVal) &&
+                             expiryMsVal > 0 &&
+                             DateTime.UnixEpoch
+                                 .AddMilliseconds(expiryMsVal)
+                                 .AddDays(3).Date <= DateTime.UtcNow.Date)
+                    {
+                        result = new ValidationResult(false, $"subscription expiried {expiryMsVal}");
                     }
                     else
                     {
@@ -168,43 +182,20 @@ namespace Iap.Verify
             return result;
         }
 
-        private static ValidationResult ValidateSubscription(Receipt receipt, AppleResponse appleResponse, ILogger log)
+        private static async Task SaveLog(Receipt receipt, ValidationResult validationResult, ILogger log)
         {
-            var result = default(ValidationResult);
-
             try
             {
-                if (appleResponse.Receipt == null)
-                {
-                    result = new ValidationResult(false, "no receipt returned");
-                }
-                else if (appleResponse.Receipt.Property("bid").Value.Value<string>() is string bid &&
-                         receipt.BundleId != bid)
-                {
-                    result = new ValidationResult(false, $"bundle id '{receipt.BundleId}' does not match '{bid}'");
-                }
-                else if (appleResponse.Receipt.Property("product_id").Value.Value<string>() is string productId &&
-                         receipt.ProductId != productId)
-                {
-                    result = new ValidationResult(false, $"product id '{receipt.ProductId}' does not match '{productId}'");
-                }
-                else if (appleResponse.Receipt.Property("transaction_id").Value.Value<string>() is string transId &&
-                         receipt.TransactionId != transId)
-                {
-                    result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{transId}'");
-                }
-                else
-                {
-                    result = new ValidationResult(true);
-                }
+                var table = Storage.GetAppleTable();
+                var entity = new Verification(receipt, validationResult);
+                await table.CreateIfNotExistsAsync().ConfigureAwait(false);
+                var insertOp = TableOperation.Insert(entity);
+                await table.ExecuteAsync(insertOp).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                log.LogError("Failed to validate subscription", ex);
-                result = new ValidationResult(false, ex.Message);
+                log.LogError("Failed to save log", ex);
             }
-
-            return result;            
         }
     }
 }

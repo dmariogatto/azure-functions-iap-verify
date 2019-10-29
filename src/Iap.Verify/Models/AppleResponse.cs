@@ -12,10 +12,7 @@ namespace Iap.Verify.Models
         /// Either 0 if the receipt is valid, or an error code
         /// </summary>
         public int Status { get; set; }
-
-        public int AutoRenewStatus { get; set; }
-        public string AutoRenewProductId { get; set; }
-
+        
         /// <summary>
         /// A JSON representation of the receipt that was sent for verification. For information about keys found in a receipt.
         /// </summary>
@@ -29,10 +26,9 @@ namespace Iap.Verify.Models
         /// <summary>
         /// Only returned for receipts containing auto-renewable subscriptions. JSON representation of the receipt for the most recent renewal.
         /// </summary>
-        public JObject LatestReceiptInfo { get; set; }
+        public JArray LatestReceiptInfo { get; set; }
 
         public bool IsValid => Status == 0;
-        public bool IsAutoRenew => AutoRenewStatus == 1 && !string.IsNullOrEmpty(AutoRenewProductId);
         public bool WrongEnvironment => Status == 21007 || Status == 21008;
 
         public string Error
