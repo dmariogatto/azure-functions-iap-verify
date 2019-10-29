@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -11,5 +12,8 @@ namespace Iap.Verify.Models
         public string TransactionId { get; set; }
         public string DeveloperPayload { get; set; }
         public string Token { get; set; }
+
+        [JsonIgnore]
+        public string Environment { get; set; }
     }
 }

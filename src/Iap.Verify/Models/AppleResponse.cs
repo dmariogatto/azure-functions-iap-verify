@@ -12,6 +12,8 @@ namespace Iap.Verify.Models
         /// Either 0 if the receipt is valid, or an error code
         /// </summary>
         public int Status { get; set; }
+
+        public string Environment { get; set; }
         
         /// <summary>
         /// A JSON representation of the receipt that was sent for verification. For information about keys found in a receipt.

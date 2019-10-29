@@ -11,9 +11,8 @@ using Iap.Verify.Models;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.AndroidPublisher.v3;
 using Google.Apis.Services;
-using Iap.Verify.Tables;
-using Iap.Verify.Tables.Entities;
 using Microsoft.WindowsAzure.Storage.Table;
+using Iap.Verify.Tables;
 
 namespace Iap.Verify
 {
@@ -42,6 +41,7 @@ namespace Iap.Verify
         [FunctionName(nameof(Google))]
         public static async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req,
+            [Table(nameof(Google))] CloudTable verificationTable,
             ILogger log)
         {
             var receipt = default(Receipt);
@@ -54,7 +54,7 @@ namespace Iap.Verify
             }
             catch (Exception ex)
             {
-                log.LogError($"Failed to parse {nameof(Receipt)}", ex);
+                log.LogError($"Failed to parse {nameof(Receipt)}: {ex.Message}", ex);
             }
 
             if (!string.IsNullOrEmpty(receipt?.BundleId) &&
@@ -80,7 +80,7 @@ namespace Iap.Verify
                 }
                 catch (Exception ex)
                 {
-                    log.LogError($"Failed to validate IAP", ex);
+                    log.LogError($"Failed to validate IAP: {ex.Message}", ex);
                     result = new ValidationResult(false, ex.Message);
                 }
             }
@@ -89,7 +89,7 @@ namespace Iap.Verify
                 result = new ValidationResult(false, $"Invalid {nameof(Receipt)}");
             }
 
-            await SaveLog(receipt, result, log);
+            await Storage.SaveLog(verificationTable, receipt, result, log);
 
             if (result.IsValid)
             {
@@ -118,6 +118,12 @@ namespace Iap.Verify
             {
                 var request = _googleService.Purchases.Products.Get(receipt.BundleId, receipt.ProductId, receipt.Token);
                 var purchase = await request.ExecuteAsync();
+
+                if (purchase != null)
+                {
+                    receipt.Environment = purchase.PurchaseType == 0
+                        ? "Test" : "Production";
+                }
 
                 if (purchase.DeveloperPayload != receipt.DeveloperPayload)
                 {
@@ -148,18 +154,24 @@ namespace Iap.Verify
             try
             {
                 var request = _googleService.Purchases.Subscriptions.Get(receipt.BundleId, receipt.ProductId, receipt.Token);
-                var purchaseState = await request.ExecuteAsync();
+                var purchase = await request.ExecuteAsync();
 
-                if (purchaseState.DeveloperPayload != receipt.DeveloperPayload)
+                if (purchase != null)
+                {
+                    receipt.Environment = purchase.PurchaseType == 0
+                        ? "Test" : "Production";
+                }
+
+                if (purchase?.DeveloperPayload != receipt.DeveloperPayload)
                 {
                     result = new ValidationResult(false, "DeveloperPayload did not match");
                 }
-                else if (!purchaseState.ExpiryTimeMillis.HasValue ||
+                else if (!purchase.ExpiryTimeMillis.HasValue ||
                          DateTime.UnixEpoch
-                                 .AddMilliseconds(purchaseState.ExpiryTimeMillis.Value)
+                                 .AddMilliseconds(purchase.ExpiryTimeMillis.Value)
                                  .AddDays(3).Date <= DateTime.UtcNow.Date)
                 {
-                    result = new ValidationResult(false, $"subscription expiried {purchaseState.ExpiryTimeMillis ?? -1}");
+                    result = new ValidationResult(false, $"subscription expiried {purchase.ExpiryTimeMillis ?? -1}");
                 }
                 else
                 {
@@ -168,27 +180,11 @@ namespace Iap.Verify
             }
             catch (Exception ex)
             {
-                log.LogError("Failed to validate subscription", ex);
+                log.LogError($"Failed to validate subscription: {ex.Message}", ex);
                 result = new ValidationResult(false, ex.Message);
             }
 
             return result;
-        }
-
-        private static async Task SaveLog(Receipt receipt, ValidationResult validationResult, ILogger log)
-        {
-            try
-            {
-                var table = Storage.GetGoogleTable();
-                var entity = new Verification(receipt, validationResult);
-                await table.CreateIfNotExistsAsync().ConfigureAwait(false);
-                var insertOp = TableOperation.Insert(entity);
-                await table.ExecuteAsync(insertOp).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                log.LogError("Failed to save log", ex);
-            }
-        }
+        }        
     }
 }

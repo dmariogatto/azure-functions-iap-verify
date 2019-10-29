@@ -13,7 +13,6 @@ using Newtonsoft.Json.Linq;
 using System.Linq;
 using Newtonsoft.Json.Serialization;
 using Iap.Verify.Tables;
-using Iap.Verify.Tables.Entities;
 using Microsoft.WindowsAzure.Storage.Table;
 
 namespace Iap.Verify
@@ -31,6 +30,7 @@ namespace Iap.Verify
         [FunctionName(nameof(Apple))]
         public static async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req,
+            [Table(nameof(Apple))] CloudTable verificationTable,
             ILogger log)
         {
             var receipt = default(Receipt);
@@ -43,7 +43,7 @@ namespace Iap.Verify
             }
             catch (Exception ex)
             {
-                log.LogError(ex, $"Failed to parse {nameof(Receipt)}");
+                log.LogError($"Failed to parse {nameof(Receipt)}: {ex.Message}", ex);
             }
                        
             if (!string.IsNullOrEmpty(receipt?.BundleId) &&
@@ -77,7 +77,7 @@ namespace Iap.Verify
                 result = new ValidationResult(false, $"Invalid {nameof(Receipt)}");
             }
 
-            await SaveLog(receipt, result, log);
+            await Storage.SaveLog(verificationTable, receipt, result, log);
 
             if (result.IsValid)
             {
@@ -119,7 +119,7 @@ namespace Iap.Verify
             }
             catch (Exception ex)
             {
-                log.LogError($"Failed to parse {nameof(AppleResponse)}", ex);
+                log.LogError($"Failed to parse {nameof(AppleResponse)}: {ex.Message}", ex);
             }
 
             return appleResponse;
@@ -131,6 +131,8 @@ namespace Iap.Verify
 
             try
             {
+                receipt.Environment = appleResponse.Environment;
+
                 if (appleResponse.Receipt == null)
                 {
                     result = new ValidationResult(false, "no receipt returned");
@@ -175,27 +177,11 @@ namespace Iap.Verify
             }
             catch (Exception ex)
             {
-                log.LogError("Failed to validate product", ex);
+                log.LogError($"Failed to validate product: {ex.Message}", ex);
                 result = new ValidationResult(false, ex.Message);
             }
 
             return result;
-        }
-
-        private static async Task SaveLog(Receipt receipt, ValidationResult validationResult, ILogger log)
-        {
-            try
-            {
-                var table = Storage.GetAppleTable();
-                var entity = new Verification(receipt, validationResult);
-                await table.CreateIfNotExistsAsync().ConfigureAwait(false);
-                var insertOp = TableOperation.Insert(entity);
-                await table.ExecuteAsync(insertOp).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                log.LogError("Failed to save log", ex);
-            }
-        }
+        }        
     }
 }

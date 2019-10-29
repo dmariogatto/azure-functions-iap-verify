@@ -1,38 +1,27 @@
-﻿using Microsoft.Extensions.Configuration;
-using Microsoft.WindowsAzure.Storage;
+﻿using Iap.Verify.Models;
+using Iap.Verify.Tables.Entities;
+using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage.Table;
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Threading.Tasks;
 
 namespace Iap.Verify.Tables
 {
     public static class Storage
     {
-        private static IConfigurationRoot Configuration = new ConfigurationBuilder()
-                   .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
-                   .AddJsonFile("local.settings.json", optional: true, reloadOnChange: true)
-                   .AddEnvironmentVariables()
-                   .Build();
-
-        public static CloudTable GetAppleTable()
+        public static async Task SaveLog(CloudTable table, Receipt receipt, ValidationResult validationResult, ILogger log)
         {
-            return GetClient().GetTableReference("Apple");
-        }
-
-        public static CloudTable GetGoogleTable()
-        {
-            return GetClient().GetTableReference("Google");
-        }
-
-        private static CloudTableClient GetClient()
-        {
-            var storageConnString =
-                Configuration["Values:AzureWebJobsStorage"] ??
-                Configuration.GetConnectionString("StorageConnectionString") ??
-                "UseDevelopmentStorage=true;";
-            var storageAccount = CloudStorageAccount.Parse(storageConnString);
-            return storageAccount.CreateCloudTableClient();
+            try
+            {
+                var entity = new Verification(receipt, validationResult);
+                await table.CreateIfNotExistsAsync().ConfigureAwait(false);
+                var insertOp = TableOperation.Insert(entity);
+                await table.ExecuteAsync(insertOp).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                log.LogError($"Failed to save log: {ex.Message}", ex);
+            }
         }
     }
 }
