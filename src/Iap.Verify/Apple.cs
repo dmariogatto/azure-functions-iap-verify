@@ -19,58 +19,83 @@ namespace Iap.Verify
     {
         private const string AppleProductionUrl = "https://buy.itunes.apple.com/verifyReceipt";
         private const string AppleTestUrl = "https://sandbox.itunes.apple.com/verifyReceipt";
-        private static HttpClient _httpClient = new HttpClient();
-        private static JsonSerializer _serializer = new JsonSerializer()
+        private static readonly  HttpClient _httpClient = new HttpClient();
+        private static readonly JsonSerializer _serializer = new JsonSerializer()
         {
             ContractResolver = new DefaultContractResolver() { NamingStrategy = new SnakeCaseNamingStrategy() }
         };
 
         [FunctionName(nameof(Apple))]
         public static async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Function, "post", Route = null)] HttpRequest req,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req,
             ILogger log)
         {
-            var receipt = default(AppleReceipt);
+            var receipt = default(Receipt);
+            var result = default(ValidationResult);
 
             try
             {
                 var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-                receipt = JsonConvert.DeserializeObject<AppleReceipt>(requestBody);
+                receipt = JsonConvert.DeserializeObject<Receipt>(requestBody);
             }
             catch (Exception ex)
             {
-                log.LogError(ex, $"Failed to parse {nameof(AppleReceipt)}");
+                log.LogError(ex, $"Failed to parse {nameof(Receipt)}");
             }
                        
-            if (string.IsNullOrEmpty(receipt?.BundleId) ||
-                string.IsNullOrEmpty(receipt?.ProductId) ||
-                string.IsNullOrEmpty(receipt?.TransactionId) ||
-                string.IsNullOrEmpty(receipt?.Token))
+            if (!string.IsNullOrEmpty(receipt?.BundleId) &&
+                !string.IsNullOrEmpty(receipt?.ProductId) &&
+                !string.IsNullOrEmpty(receipt?.TransactionId) &&
+                !string.IsNullOrEmpty(receipt?.Token))
             {
-                return new BadRequestResult();
+                var appleResponse = await PostAppleReceipt(AppleProductionUrl, receipt, log);
+                // Apple recommends calling production, then falling back to sandbox on an error code
+                if (appleResponse?.WrongEnvironment == true)
+                {
+                    log.LogInformation("Sandbox purchase, calling test environment...");
+                    appleResponse = await PostAppleReceipt(AppleTestUrl, receipt, log);
+                }
+
+                if (appleResponse?.IsValid == true)
+                {
+                    result = appleResponse.IsAutoRenew
+                        ? ValidateSubscription(receipt, appleResponse, log)
+                        : ValidateProduct(receipt, appleResponse, log);
+                }
+                else if (!string.IsNullOrEmpty(appleResponse?.Error))
+                {
+                    result = new ValidationResult(false, appleResponse.Error);
+                }
+                else
+                {
+                    result = new ValidationResult(false, $"Invalid {nameof(Receipt)}");
+                }
+            }
+            else
+            {
+                result = new ValidationResult(false, $"Invalid {nameof(Receipt)}");
             }
 
-            log.LogInformation($"IAP receipt: {receipt.ProductId}, {receipt.TransactionId}");
-
-            var result = await PostAppleReceipt(AppleProductionUrl, receipt, log);
-            // Apple recommends calling production, then falling back to sandbox on an error code
-            if (result?.WrongEnvironment == true)
+            if (result.IsValid)
             {
-                log.LogInformation("Sandbox purchase, calling test environment...");
-                result = await PostAppleReceipt(AppleTestUrl, receipt, log);
+                log.LogInformation($"Validated IAP '{receipt.BundleId}':'{receipt.ProductId}'");
+                return new OkResult();
             }
 
-            if (result?.IsValid == true)
+            if (!string.IsNullOrEmpty(receipt?.BundleId) &&
+                !string.IsNullOrEmpty(receipt?.ProductId))
             {
-                return result.IsAutoRenew
-                    ? ValidateIapAutoRenew(receipt, result, log)
-                    : ValidateIap(receipt, result, log);
+                log.LogInformation($"Failed to validate IAP '{receipt.BundleId}':'{receipt.ProductId}', reason '{result?.Message ?? string.Empty}'");
+            }
+            else
+            {
+                log.LogInformation($"Failed to validate IAP, reason '{result?.Message ?? string.Empty}'");
             }
 
             return new BadRequestResult();
         }
 
-        private static async Task<AppleResponse> PostAppleReceipt(string url, AppleReceipt receipt, ILogger log)
+        private static async Task<AppleResponse> PostAppleReceipt(string url, Receipt receipt, ILogger log)
         {
             var appleResponse = default(AppleResponse);
 
@@ -91,83 +116,95 @@ namespace Iap.Verify
             }
             catch (Exception ex)
             {
-                log.LogError(ex, $"Failed to parse {nameof(AppleResponse)}");
+                log.LogError($"Failed to parse {nameof(AppleResponse)}", ex);
             }
 
             return appleResponse;
         }
 
-        private static IActionResult ValidateIap(AppleReceipt receipt, AppleResponse result, ILogger log)
+        private static ValidationResult ValidateProduct(Receipt receipt, AppleResponse appleResponse, ILogger log)
         {
-            if (result.Receipt == null)
+            var result = default(ValidationResult);
+
+            try
             {
-                log.LogInformation("IAP invalid, no receipt returned!");
-                return new BadRequestResult();
+                if (appleResponse.Receipt == null)
+                {
+                    result = new ValidationResult(false, "no receipt returned");
+                }
+                else if (appleResponse.Receipt.Property("bundle_id").Value.Value<string>() is string bid &&
+                         receipt.BundleId != bid)
+                {
+                    result = new ValidationResult(false, $"bundle id '{receipt.BundleId}' does not match '{bid}'");
+                }
+                else
+                {
+                    var purchases = appleResponse.Receipt.Property("in_app").Value.Value<JArray>();
+                    var purchase = purchases?.Count > 0
+                        ? purchases.OfType<JObject>().FirstOrDefault(p => p.Property("product_id").Value.Value<string>() == receipt.ProductId)
+                        : default;
+
+                    if (purchase == default)
+                    {
+                        result = new ValidationResult(false, $"did not find '{receipt.ProductId}' in list of purchases");
+                    }
+                    else if (purchase.Property("transaction_id").Value.Value<string>() is string transId &&
+                             receipt.TransactionId != transId)
+                    {
+                        result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{transId}'");
+                    }
+                    else
+                    {
+                        result = new ValidationResult(true);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                log.LogError("Failed to validate product", ex);
+                result = new ValidationResult(false, ex.Message);
             }
 
-            var bundleId = result.Receipt.Property("bundle_id").Value.Value<string>();
-            if (receipt.BundleId != bundleId)
-            {
-                log.LogInformation($"IAP invalid, bundle id '{bundleId ?? string.Empty}' does not match {receipt.BundleId}!");
-                return new BadRequestResult();
-            }
-
-            var purchases = result.Receipt.Property("in_app").Value.Value<JArray>();
-            if (purchases == null || purchases.Count == 0)
-            {
-                log.LogInformation("IAP invalid, no purchases returned!");
-                return new BadRequestResult();
-            }
-
-            var purchase = purchases.OfType<JObject>().FirstOrDefault(p => p.Property("product_id").Value.Value<string>() == receipt.ProductId);
-            if (purchase == null)
-            {
-                log.LogInformation($"IAP invalid, did not find {receipt.ProductId} in list of purchases!");
-                return new BadRequestResult();
-            }
-
-            var transactionId = purchase.Property("transaction_id").Value.Value<string>();
-            if (receipt.TransactionId != transactionId)
-            {
-                log.LogInformation($"IAP invalid, transaction id '{transactionId ?? string.Empty}' does not match {receipt.TransactionId}!");
-                return new BadRequestResult();
-            }
-
-            log.LogInformation($"IAP Success: {receipt.ProductId}, {receipt.TransactionId}");
-            return new OkResult();
+            return result;
         }
 
-        private static IActionResult ValidateIapAutoRenew(AppleReceipt receipt, AppleResponse result, ILogger log)
+        private static ValidationResult ValidateSubscription(Receipt receipt, AppleResponse appleResponse, ILogger log)
         {
-            if (result.Receipt == null || result.LatestReceiptInfo == null)
+            var result = default(ValidationResult);
+
+            try
             {
-                log.LogInformation("IAP AutoRenew invalid, no receipt returned!");
-                return new BadRequestResult();
+                if (appleResponse.Receipt == null)
+                {
+                    result = new ValidationResult(false, "no receipt returned");
+                }
+                else if (appleResponse.Receipt.Property("bid").Value.Value<string>() is string bid &&
+                         receipt.BundleId != bid)
+                {
+                    result = new ValidationResult(false, $"bundle id '{receipt.BundleId}' does not match '{bid}'");
+                }
+                else if (appleResponse.Receipt.Property("product_id").Value.Value<string>() is string productId &&
+                         receipt.ProductId != productId)
+                {
+                    result = new ValidationResult(false, $"product id '{receipt.ProductId}' does not match '{productId}'");
+                }
+                else if (appleResponse.Receipt.Property("transaction_id").Value.Value<string>() is string transId &&
+                         receipt.TransactionId != transId)
+                {
+                    result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{transId}'");
+                }
+                else
+                {
+                    result = new ValidationResult(true);
+                }
+            }
+            catch (Exception ex)
+            {
+                log.LogError("Failed to validate subscription", ex);
+                result = new ValidationResult(false, ex.Message);
             }
 
-            var bundleId = result.LatestReceiptInfo.Property("bid").Value.Value<string>();
-            if (receipt.BundleId != bundleId)
-            {
-                log.LogInformation($"IAP AutoRenew invalid, bundle id '{bundleId ?? string.Empty}' does not match {receipt.BundleId}!");
-                return new BadRequestResult();
-            }
-            
-            var productId = result.LatestReceiptInfo.Property("product_id").Value.Value<string>();
-            if (receipt.ProductId != productId)
-            {
-                log.LogInformation($"IAP AutoRenew invalid, product id '{productId ?? string.Empty}' does not match {receipt.ProductId}!");
-                return new BadRequestResult();
-            }
-
-            var transactionId = result.Receipt.Property("transaction_id").Value.Value<string>();
-            if (receipt.TransactionId != transactionId)
-            {
-                log.LogInformation($"IAP AutoRenew invalid, transaction id '{transactionId ?? string.Empty}' does not match {receipt.TransactionId}!");
-                return new BadRequestResult();
-            }
-
-            log.LogInformation($"IAP AutoRenew Success: {receipt.ProductId}, {receipt.TransactionId}");
-            return new OkResult();
+            return result;            
         }
     }
 }

@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Iap.Verify.Models
 {
-    public class GoogleReceipt
+    public class Receipt
     {
         public string BundleId { get; set; }
         public string ProductId { get; set; }

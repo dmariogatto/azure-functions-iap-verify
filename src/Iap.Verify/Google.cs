@@ -16,10 +16,10 @@ namespace Iap.Verify
 {
     public static class Google
     {
-        private static string GooglePlayAccount = Secrets.GoogleAccount;
-        private static string GooglePlayKey = Secrets.GoogleKey;
+        private const string GooglePlayAccount = Secrets.GoogleAccount;
+        private const string GooglePlayKey = Secrets.GoogleKey;
 
-        private static ServiceAccountCredential _credential = new ServiceAccountCredential
+        private static readonly ServiceAccountCredential _credential = new ServiceAccountCredential
         (
             new ServiceAccountCredential.Initializer(GooglePlayAccount)
             {
@@ -27,7 +27,7 @@ namespace Iap.Verify
             }.FromPrivateKey(GooglePlayKey)
         );
 
-        private static AndroidPublisherService _googleService = new AndroidPublisherService
+        private static readonly AndroidPublisherService _googleService = new AndroidPublisherService
         (
             new BaseClientService.Initializer
             {
@@ -38,56 +38,129 @@ namespace Iap.Verify
 
         [FunctionName(nameof(Google))]
         public static async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Function, "post", Route = null)] HttpRequest req,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req,
             ILogger log)
         {
-            var receipt = default(GoogleReceipt);
+            var receipt = default(Receipt);
+            var result = default(ValidationResult);
 
             try
             {
                 var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-                receipt = JsonConvert.DeserializeObject<GoogleReceipt>(requestBody);
+                receipt = JsonConvert.DeserializeObject<Receipt>(requestBody);
             }
             catch (Exception ex)
             {
-                log.LogError(ex, $"Failed to parse {nameof(AppleReceipt)}");
+                log.LogError($"Failed to parse {nameof(Receipt)}", ex);
             }
 
-            if (string.IsNullOrEmpty(receipt?.BundleId) ||
-                string.IsNullOrEmpty(receipt?.ProductId) ||
-                string.IsNullOrEmpty(receipt?.TransactionId) ||
-                string.IsNullOrEmpty(receipt?.DeveloperPayload) ||
-                string.IsNullOrEmpty(receipt?.Token))
+            if (!string.IsNullOrEmpty(receipt?.BundleId) &&
+                !string.IsNullOrEmpty(receipt?.ProductId) &&
+                !string.IsNullOrEmpty(receipt?.TransactionId) &&
+                !string.IsNullOrEmpty(receipt?.DeveloperPayload) &&
+                !string.IsNullOrEmpty(receipt?.Token))
             {
-                return new BadRequestResult();
+                try
+                {
+                    var product = await _googleService.Inappproducts.Get(receipt.BundleId, receipt.ProductId).ExecuteAsync();
+
+                    if (product != null)
+                    {
+                        result = product.PurchaseType == "subscription"
+                            ? await ValidateSubscription(receipt, log)
+                            : await ValidateProduct(receipt, log);
+                    }
+                    else
+                    {
+                        result = new ValidationResult(false, $"IAP '{receipt.BundleId}':'{receipt.ProductId}' not found");
+                    }                    
+                }
+                catch (Exception ex)
+                {
+                    log.LogError($"Failed to validate IAP", ex);
+                    result = new ValidationResult(false, ex.Message);
+                }
+            }
+            else
+            {
+                result = new ValidationResult(false, $"Invalid {nameof(Receipt)}");
             }
 
-            log.LogInformation($"IAP receipt: {receipt.BundleId}, {receipt.TransactionId}");
+            if (result.IsValid)
+            {
+                log.LogInformation($"Validated IAP '{receipt.BundleId}':'{receipt.ProductId}'");
+                return new OkResult();
+            }
+
+            if (!string.IsNullOrEmpty(receipt?.BundleId) &&
+                !string.IsNullOrEmpty(receipt?.ProductId))
+            {
+                log.LogInformation($"Failed to validate IAP '{receipt.BundleId}':'{receipt.ProductId}', reason '{result?.Message ?? string.Empty}'");
+            }
+            else
+            {
+                log.LogInformation($"Failed to validate IAP, reason '{result?.Message ?? string.Empty}'");
+            }
+
+            return new BadRequestResult();
+        }
+
+        private static async Task<ValidationResult> ValidateProduct(Receipt receipt, ILogger log)
+        {
+            var result = default(ValidationResult);
 
             try
             {
                 var request = _googleService.Purchases.Products.Get(receipt.BundleId, receipt.ProductId, receipt.Token);
-                var purchaseState = await request.ExecuteAsync();
+                var purchase = await request.ExecuteAsync();
 
-                if (purchaseState.DeveloperPayload != receipt.DeveloperPayload)
+                if (purchase.DeveloperPayload != receipt.DeveloperPayload)
                 {
-                    log.LogInformation($"IAP invalid, DeveloperPayload did not match!");
-                    return new BadRequestResult();
+                    result = new ValidationResult(false, "DeveloperPayload did not match");
                 }
-                if (purchaseState.PurchaseState != 0)
+                else if (purchase.PurchaseState != 0)
                 {
-                    log.LogInformation($"IAP invalid, purchase was cancelled or refunded!");
-                    return new BadRequestResult();
+                    result = new ValidationResult(false, "purchase was cancelled or refunded");
+                }
+                else
+                {
+                    result = new ValidationResult(true);
                 }
             }
             catch (Exception ex)
             {
-                log.LogInformation($"IAP invalid, error reported: {ex}");
-                return new BadRequestResult();
+                log.LogError("Failed to validate product", ex);
+                result = new ValidationResult(false, ex.Message);
             }
 
-            log.LogInformation($"IAP Success: {receipt.ProductId}, {receipt.TransactionId}");
-            return new OkResult();
+            return result;
+        }
+
+        private static async Task<ValidationResult> ValidateSubscription(Receipt receipt, ILogger log)
+        {
+            var result = default(ValidationResult);
+
+            try
+            {
+                var request = _googleService.Purchases.Subscriptions.Get(receipt.BundleId, receipt.ProductId, receipt.Token);
+                var purchaseState = await request.ExecuteAsync();
+
+                if (purchaseState.DeveloperPayload != receipt.DeveloperPayload)
+                {
+                    result = new ValidationResult(false, "DeveloperPayload did not match");
+                }
+                else
+                {
+                    result = new ValidationResult(true);
+                }
+            }
+            catch (Exception ex)
+            {
+                log.LogError("Failed to validate subscription", ex);
+                result = new ValidationResult(false, ex.Message);
+            }
+
+            return result;
         }
     }
 }
