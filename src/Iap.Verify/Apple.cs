@@ -27,6 +27,21 @@ namespace Iap.Verify
             ContractResolver = new DefaultContractResolver() { NamingStrategy = new SnakeCaseNamingStrategy() }
         };
 
+        private static int _graceDays = -1;
+        public static int GraceDays
+        {
+            get
+            {
+                if (_graceDays < 0 &&
+                    !int.TryParse(Environment.GetEnvironmentVariable("GraceDays"), out _graceDays))
+                {
+                    _graceDays = 0;
+                }
+
+                return _graceDays;
+            }
+        }
+
         [FunctionName(nameof(Apple))]
         public static async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req,
@@ -102,24 +117,31 @@ namespace Iap.Verify
         {
             var appleResponse = default(AppleResponse);
 
-            try
-            {
-                var json = new JObject(
-                    new JProperty("receipt-data", receipt.Token),
-                    new JProperty("password", Secrets.Apple)).ToString();
-                var response = await _httpClient.PostAsync(url, new StringContent(json));
-                response.EnsureSuccessStatusCode();
+            var appSecret = Environment.GetEnvironmentVariable($"AppleSecret.{receipt.BundleId}");
+            if (string.IsNullOrEmpty(appSecret))
+                appSecret = Environment.GetEnvironmentVariable("AppleSecret");
 
-                using (var stream = await response.Content.ReadAsStreamAsync())
-                using (var reader = new StreamReader(stream))
-                using (var jsonReader = new JsonTextReader(reader))
-                {
-                    appleResponse = _serializer.Deserialize<AppleResponse>(jsonReader);
-                }
-            }
-            catch (Exception ex)
+            if (!string.IsNullOrEmpty(appSecret))
             {
-                log.LogError($"Failed to parse {nameof(AppleResponse)}: {ex.Message}", ex);
+                try
+                {
+                    var json = new JObject(
+                        new JProperty("receipt-data", receipt.Token),
+                        new JProperty("password", appSecret)).ToString();
+                    var response = await _httpClient.PostAsync(url, new StringContent(json));
+                    response.EnsureSuccessStatusCode();
+
+                    using (var stream = await response.Content.ReadAsStreamAsync())
+                    using (var reader = new StreamReader(stream))
+                    using (var jsonReader = new JsonTextReader(reader))
+                    {
+                        appleResponse = _serializer.Deserialize<AppleResponse>(jsonReader);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    log.LogError($"Failed to parse {nameof(AppleResponse)}: {ex.Message}", ex);
+                }
             }
 
             return appleResponse;
@@ -165,7 +187,7 @@ namespace Iap.Verify
                              expiryMsVal > 0 &&
                              DateTime.UnixEpoch
                                  .AddMilliseconds(expiryMsVal)
-                                 .AddDays(3).Date <= DateTime.UtcNow.Date)
+                                 .AddDays(GraceDays).Date <= DateTime.UtcNow.Date)
                     {
                         result = new ValidationResult(false, $"subscription expiried {expiryMsVal}");
                     }

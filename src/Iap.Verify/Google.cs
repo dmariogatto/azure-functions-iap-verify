@@ -18,15 +18,12 @@ namespace Iap.Verify
 {
     public static class Google
     {
-        private const string GooglePlayAccount = Secrets.GoogleAccount;
-        private const string GooglePlayKey = Secrets.GoogleKey;
-
         private static readonly ServiceAccountCredential _credential = new ServiceAccountCredential
         (
-            new ServiceAccountCredential.Initializer(GooglePlayAccount)
+            new ServiceAccountCredential.Initializer(Environment.GetEnvironmentVariable("GoogleAccount"))
             {
                 Scopes = new[] { AndroidPublisherService.Scope.Androidpublisher }
-            }.FromPrivateKey(GooglePlayKey)
+            }.FromPrivateKey(Environment.GetEnvironmentVariable("GoogleKey").Replace("\\n", "\n"))
         );
 
         private static readonly AndroidPublisherService _googleService = new AndroidPublisherService
@@ -37,6 +34,21 @@ namespace Iap.Verify
                 ApplicationName = "Azure Function",
             }
         );
+
+        private static int _graceDays = -1;
+        public static int GraceDays
+        {
+            get
+            {
+                if (_graceDays < 0 &&
+                    !int.TryParse(Environment.GetEnvironmentVariable("GraceDays"), out _graceDays))
+                {
+                    _graceDays = 0;
+                }
+
+                return _graceDays;
+            }
+        }
 
         [FunctionName(nameof(Google))]
         public static async Task<IActionResult> Run(
@@ -169,7 +181,7 @@ namespace Iap.Verify
                 else if (!purchase.ExpiryTimeMillis.HasValue ||
                          DateTime.UnixEpoch
                                  .AddMilliseconds(purchase.ExpiryTimeMillis.Value)
-                                 .AddDays(3).Date <= DateTime.UtcNow.Date)
+                                 .AddDays(GraceDays).Date <= DateTime.UtcNow.Date)
                 {
                     result = new ValidationResult(false, $"subscription expiried {purchase.ExpiryTimeMillis ?? -1}");
                 }
