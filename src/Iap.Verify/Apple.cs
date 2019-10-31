@@ -170,7 +170,10 @@ namespace Iap.Verify
                         ? appleResponse.LatestReceiptInfo
                         : appleResponse.Receipt.Property("in_app").Value.Value<JArray>();
                     var purchase = purchases?.Count > 0
-                        ? purchases.OfType<JObject>().LastOrDefault(p => p.Property("product_id").Value.Value<string>() == receipt.ProductId)
+                        ? purchases.OfType<JObject>()
+                            .Where(p => p.Property("product_id").Value.Value<string>() == receipt.ProductId)
+                            .OrderBy(p => p.Property("purchase_date_ms").Value.Value<long>())
+                            .LastOrDefault()
                         : null;
 
                     if (purchase == null)
@@ -188,13 +191,6 @@ namespace Iap.Verify
                         {
                             result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match either original '{originalTransId}', or '{transId}'");
                         }
-                        else if (expiresDateMs > 0 &&
-                                 DateTime.UnixEpoch
-                                     .AddMilliseconds(expiresDateMs.Value)
-                                     .AddDays(GraceDays).Date <= DateTime.UtcNow.Date)
-                        {
-                            result = new ValidationResult(false, $"subscription expiried {expiresDateMs}");
-                        }
                         else
                         {
                             result = new ValidationResult(true);
@@ -206,6 +202,10 @@ namespace Iap.Verify
                                 OriginalTransactionId = originalTransId,
                                 PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchaseDateMs),
                                 ExpiryUtc = expiresDateMs.HasValue ? DateTime.UnixEpoch.AddMilliseconds(expiresDateMs.Value) : (DateTime?)null,
+                                ServerUtc = DateTime.UtcNow,
+                                IsExpired = DateTime.UnixEpoch
+                                                    .AddMilliseconds(expiresDateMs.Value)
+                                                    .AddDays(GraceDays).Date <= DateTime.UtcNow.Date,
                                 Token = receipt.Token,
                                 DeveloperPayload = receipt.DeveloperPayload,
                             };

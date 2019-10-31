@@ -137,7 +137,15 @@ namespace Iap.Verify
                         ? "Test" : "Production";
                 }
 
-                if (purchase.DeveloperPayload != receipt.DeveloperPayload)
+                if (purchase == null)
+                {
+                    result = new ValidationResult(false, $"no purchase found");
+                }
+                else if (!purchase.OrderId.StartsWith(receipt.TransactionId))
+                {
+                    result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.OrderId}'");
+                }
+                else if (purchase.DeveloperPayload != receipt.DeveloperPayload)
                 {
                     result = new ValidationResult(false, "DeveloperPayload did not match");
                 }
@@ -155,6 +163,7 @@ namespace Iap.Verify
                         TransactionId = receipt.TransactionId,
                         OriginalTransactionId = purchase.OrderId,
                         PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.PurchaseTimeMillis.Value),
+                        ServerUtc = DateTime.UtcNow,
                         ExpiryUtc = (DateTime?)null,
                         Token = receipt.Token,
                         DeveloperPayload = receipt.DeveloperPayload,
@@ -185,17 +194,18 @@ namespace Iap.Verify
                         ? "Test" : "Production";
                 }
 
-                if (purchase?.DeveloperPayload != receipt.DeveloperPayload)
+                if (purchase == null)
+                {
+                    result = new ValidationResult(false, $"no purchase found");
+                }
+                else if (!purchase.OrderId.StartsWith(receipt.TransactionId))
+                {
+                    result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.OrderId}'");
+                }
+                else if (purchase.DeveloperPayload != receipt.DeveloperPayload)
                 {
                     result = new ValidationResult(false, "DeveloperPayload did not match");
-                }
-                else if (!purchase.ExpiryTimeMillis.HasValue ||
-                         DateTime.UnixEpoch
-                                 .AddMilliseconds(purchase.ExpiryTimeMillis.Value)
-                                 .AddDays(GraceDays).Date <= DateTime.UtcNow.Date)
-                {
-                    result = new ValidationResult(false, $"subscription expiried {purchase.ExpiryTimeMillis ?? -1}");
-                }
+                }                
                 else
                 {
                     result = new ValidationResult(true);
@@ -203,10 +213,14 @@ namespace Iap.Verify
                     {
                         BundleId = receipt.BundleId,
                         ProductId = receipt.ProductId,
-                        TransactionId = receipt.TransactionId,
-                        OriginalTransactionId = purchase.OrderId,
+                        TransactionId = purchase.OrderId,
+                        OriginalTransactionId = receipt.TransactionId,
                         PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.StartTimeMillis.Value),
                         ExpiryUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.ExpiryTimeMillis.Value),
+                        ServerUtc = DateTime.UtcNow,
+                        IsExpired = DateTime.UnixEpoch
+                                            .AddMilliseconds(purchase.ExpiryTimeMillis.Value)
+                                            .AddDays(GraceDays).Date <= DateTime.UtcNow.Date,
                         Token = receipt.Token,
                         DeveloperPayload = purchase.DeveloperPayload,
                     };

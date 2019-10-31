@@ -15,6 +15,9 @@ namespace Iap.Verify.Models
         public DateTime PurchaseDateUtc { get; set; }
         public DateTime? ExpiryUtc { get; set; }
 
+        public DateTime ServerUtc { get; set; }
+        public bool IsExpired { get; set; }
+
         public string Token { get; set; }
         public string DeveloperPayload { get; set; }
     }
