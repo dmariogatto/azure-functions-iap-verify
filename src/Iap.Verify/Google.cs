@@ -103,10 +103,10 @@ namespace Iap.Verify
 
             await Storage.SaveLog(verificationTable, receipt, result, log);
 
-            if (result.IsValid)
+            if (result.IsValid && result.ValidatedReceipt != null)
             {
                 log.LogInformation($"Validated IAP '{receipt.BundleId}':'{receipt.ProductId}'");
-                return new OkResult();
+                return new JsonResult(result.ValidatedReceipt);
             }
 
             if (!string.IsNullOrEmpty(receipt?.BundleId) &&
@@ -148,6 +148,17 @@ namespace Iap.Verify
                 else
                 {
                     result = new ValidationResult(true);
+                    result.ValidatedReceipt = new ValidatedReceipt()
+                    {
+                        BundleId = receipt.BundleId,
+                        ProductId = purchase.ProductId,
+                        TransactionId = receipt.TransactionId,
+                        OriginalTransactionId = purchase.OrderId,
+                        PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.PurchaseTimeMillis.Value),
+                        ExpiryUtc = (DateTime?)null,
+                        Token = receipt.Token,
+                        DeveloperPayload = receipt.DeveloperPayload,
+                    };
                 }
             }
             catch (Exception ex)
@@ -188,6 +199,17 @@ namespace Iap.Verify
                 else
                 {
                     result = new ValidationResult(true);
+                    result.ValidatedReceipt = new ValidatedReceipt()
+                    {
+                        BundleId = receipt.BundleId,
+                        ProductId = receipt.ProductId,
+                        TransactionId = receipt.TransactionId,
+                        OriginalTransactionId = purchase.OrderId,
+                        PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.StartTimeMillis.Value),
+                        ExpiryUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.ExpiryTimeMillis.Value),
+                        Token = receipt.Token,
+                        DeveloperPayload = purchase.DeveloperPayload,
+                    };
                 }
             }
             catch (Exception ex)

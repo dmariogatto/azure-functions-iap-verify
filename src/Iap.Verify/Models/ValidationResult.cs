@@ -17,5 +17,7 @@ namespace Iap.Verify.Models
 
         public bool IsValid { get; set; }
         public string Message { get; set; }
+
+        public ValidatedReceipt ValidatedReceipt { get; set; }
     }
 }

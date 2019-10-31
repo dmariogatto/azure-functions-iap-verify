@@ -94,10 +94,10 @@ namespace Iap.Verify
 
             await Storage.SaveLog(verificationTable, receipt, result, log);
 
-            if (result.IsValid)
+            if (result.IsValid && result.ValidatedReceipt != null)
             {
                 log.LogInformation($"Validated IAP '{receipt.BundleId}':'{receipt.ProductId}'");
-                return new OkResult();
+                return new JsonResult(result.ValidatedReceipt);
             }
 
             if (!string.IsNullOrEmpty(receipt?.BundleId) &&
@@ -177,23 +177,39 @@ namespace Iap.Verify
                     {
                         result = new ValidationResult(false, $"did not find '{receipt.ProductId}' in list of purchases");
                     }
-                    else if (purchase.Property("original_transaction_id").Value.Value<string>() is string transId &&
-                             receipt.TransactionId != transId)
-                    {
-                        result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{transId}'");
-                    }
-                    else if (purchase.Property("expires_date_ms")?.Value?.Value<string>() is string expiryMs &&
-                             long.TryParse(expiryMs, out var expiryMsVal) &&
-                             expiryMsVal > 0 &&
-                             DateTime.UnixEpoch
-                                 .AddMilliseconds(expiryMsVal)
-                                 .AddDays(GraceDays).Date <= DateTime.UtcNow.Date)
-                    {
-                        result = new ValidationResult(false, $"subscription expiried {expiryMsVal}");
-                    }
                     else
                     {
-                        result = new ValidationResult(true);
+                        var transId = purchase.Property("transaction_id").Value.Value<string>();
+                        var originalTransId = purchase.Property("original_transaction_id").Value.Value<string>();
+                        var purchaseDateMs = purchase.Property("purchase_date_ms").Value.Value<long>();
+                        var expiresDateMs = purchase.Property("expires_date_ms")?.Value?.Value<long>();
+
+                        if (receipt.TransactionId != transId && receipt.TransactionId != originalTransId)
+                        {
+                            result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match either original '{originalTransId}', or '{transId}'");
+                        }
+                        else if (expiresDateMs > 0 &&
+                                 DateTime.UnixEpoch
+                                     .AddMilliseconds(expiresDateMs.Value)
+                                     .AddDays(GraceDays).Date <= DateTime.UtcNow.Date)
+                        {
+                            result = new ValidationResult(false, $"subscription expiried {expiresDateMs}");
+                        }
+                        else
+                        {
+                            result = new ValidationResult(true);
+                            result.ValidatedReceipt = new ValidatedReceipt()
+                            {
+                                BundleId = receipt.BundleId,
+                                ProductId = receipt.ProductId,
+                                TransactionId = transId,
+                                OriginalTransactionId = originalTransId,
+                                PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchaseDateMs),
+                                ExpiryUtc = expiresDateMs.HasValue ? DateTime.UnixEpoch.AddMilliseconds(expiresDateMs.Value) : (DateTime?)null,
+                                Token = receipt.Token,
+                                DeveloperPayload = receipt.DeveloperPayload,
+                            };
+                        }
                     }
                 }
             }
