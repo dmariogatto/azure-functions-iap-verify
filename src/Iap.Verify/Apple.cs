@@ -21,7 +21,8 @@ namespace Iap.Verify
     {
         private const string AppleProductionUrl = "https://buy.itunes.apple.com/verifyReceipt";
         private const string AppleTestUrl = "https://sandbox.itunes.apple.com/verifyReceipt";
-        private static readonly  HttpClient _httpClient = new HttpClient();
+
+        private static readonly HttpClient _httpClient = new HttpClient();
         private static readonly JsonSerializer _serializer = new JsonSerializer()
         {
             ContractResolver = new DefaultContractResolver() { NamingStrategy = new SnakeCaseNamingStrategy() }
@@ -44,23 +45,13 @@ namespace Iap.Verify
 
         [FunctionName(nameof(Apple))]
         public static async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] Receipt receipt,
+            HttpRequest req,
             [Table(nameof(Apple))] CloudTable verificationTable,
             ILogger log)
         {
-            var receipt = default(Receipt);
             var result = default(ValidationResult);
-
-            try
-            {
-                var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-                receipt = JsonConvert.DeserializeObject<Receipt>(requestBody);
-            }
-            catch (Exception ex)
-            {
-                log.LogError($"Failed to parse {nameof(Receipt)}: {ex.Message}", ex);
-            }
-                       
+                                   
             if (!string.IsNullOrEmpty(receipt?.BundleId) &&
                 !string.IsNullOrEmpty(receipt?.ProductId) &&
                 !string.IsNullOrEmpty(receipt?.TransactionId) &&
