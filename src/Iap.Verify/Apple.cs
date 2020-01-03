@@ -150,20 +150,19 @@ namespace Iap.Verify
                 {
                     result = new ValidationResult(false, "no receipt returned");
                 }
-                else if (appleResponse.Receipt.Property("bundle_id").Value.Value<string>() is string bid &&
-                         receipt.BundleId != bid)
+                else if (appleResponse.Receipt.BundleId != receipt.BundleId)
                 {
-                    result = new ValidationResult(false, $"bundle id '{receipt.BundleId}' does not match '{bid}'");
+                    result = new ValidationResult(false, $"bundle id '{receipt.BundleId}' does not match '{appleResponse.Receipt.BundleId}'");
                 }
                 else
                 {
-                    var purchases = appleResponse.LatestReceiptInfo?.Count > 0
+                    var purchases = appleResponse.LatestReceiptInfo?.Any() == true
                         ? appleResponse.LatestReceiptInfo
-                        : appleResponse.Receipt.Property("in_app").Value.Value<JArray>();
-                    var purchase = purchases?.Count > 0
-                        ? purchases.OfType<JObject>()
-                            .Where(p => p.Property("product_id").Value.Value<string>() == receipt.ProductId)
-                            .OrderBy(p => p.Property("purchase_date_ms").Value.Value<long>())
+                        : appleResponse.Receipt?.InApp;
+                    var purchase = purchases?.Any() == true
+                        ? purchases
+                            .Where(p => p.ProductId == receipt.ProductId)
+                            .OrderBy(p => p.PurchaseDateMs)
                             .LastOrDefault()
                         : null;
 
@@ -173,14 +172,9 @@ namespace Iap.Verify
                     }
                     else
                     {
-                        var transId = purchase.Property("transaction_id").Value.Value<string>();
-                        var originalTransId = purchase.Property("original_transaction_id").Value.Value<string>();
-                        var purchaseDateMs = purchase.Property("purchase_date_ms").Value.Value<long>();
-                        var expiresDateMs = purchase.Property("expires_date_ms")?.Value?.Value<long>();
-
-                        if (receipt.TransactionId != transId && receipt.TransactionId != originalTransId)
+                        if (receipt.TransactionId != purchase.TransactionId && receipt.TransactionId != purchase.OriginalTransactionId)
                         {
-                            result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match either original '{originalTransId}', or '{transId}'");
+                            result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match either original '{purchase.OriginalTransactionId}', or '{purchase.TransactionId}'");
                         }
                         else
                         {
@@ -189,14 +183,16 @@ namespace Iap.Verify
                             {
                                 BundleId = receipt.BundleId,
                                 ProductId = receipt.ProductId,
-                                TransactionId = transId,
-                                OriginalTransactionId = originalTransId,
-                                PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchaseDateMs),
-                                ExpiryUtc = expiresDateMs.HasValue ? DateTime.UnixEpoch.AddMilliseconds(expiresDateMs.Value) : (DateTime?)null,
+                                TransactionId = purchase.TransactionId,
+                                OriginalTransactionId = purchase.OriginalTransactionId,
+                                PurchaseDateUtc = purchase.PurchaseDateUtc,
+                                ExpiryUtc = purchase.ExpiresDateUtc,
                                 ServerUtc = DateTime.UtcNow,
-                                IsExpired = DateTime.UnixEpoch
-                                                    .AddMilliseconds(expiresDateMs.Value)
-                                                    .AddDays(GraceDays).Date <= DateTime.UtcNow.Date,
+                                IsExpired = purchase.ExpiresDateMs > 0
+                                            ? DateTime.UnixEpoch
+                                                      .AddMilliseconds(purchase.ExpiresDateMs.Value)
+                                                      .AddDays(GraceDays).Date <= DateTime.UtcNow.Date
+                                            : false,
                                 Token = receipt.Token,
                                 DeveloperPayload = receipt.DeveloperPayload,
                             };

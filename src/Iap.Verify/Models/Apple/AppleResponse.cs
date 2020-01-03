@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.Collections.Generic;
 
 namespace Iap.Verify.Models
 {
@@ -16,9 +17,9 @@ namespace Iap.Verify.Models
         public string Environment { get; set; }
         
         /// <summary>
-        /// A JSON representation of the receipt that was sent for verification. For information about keys found in a receipt.
+        /// A JSON representation of the receipt that was sent for verification.
         /// </summary>
-        public JObject Receipt { get; set; }
+        public AppleReceipt Receipt { get; set; }
 
         /// <summary>
         /// Only returned for receipts containing auto-renewable subscriptions. Base-64 encoded receipt for the most recent renewal.
@@ -26,9 +27,9 @@ namespace Iap.Verify.Models
         public string LatestReceipt { get; set; }
 
         /// <summary>
-        /// Only returned for receipts containing auto-renewable subscriptions. JSON representation of the receipt for the most recent renewal.
+        /// Only returned for receipts containing auto-renewable subscriptions.
         /// </summary>
-        public JArray LatestReceiptInfo { get; set; }
+        public List<ApplePurchase> LatestReceiptInfo { get; set; }
 
         public bool IsValid => Status == 0;
         public bool WrongEnvironment => Status == 21007 || Status == 21008;

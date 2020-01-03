@@ -1,18 +1,16 @@
-using System;
-using System.IO;
-using System.Threading.Tasks;
+using Google.Apis.AndroidPublisher.v3;
+using Google.Apis.Auth.OAuth2;
+using Google.Apis.Services;
+using Iap.Verify.Models;
+using Iap.Verify.Tables;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
-using Iap.Verify.Models;
-using Google.Apis.Auth.OAuth2;
-using Google.Apis.AndroidPublisher.v3;
-using Google.Apis.Services;
 using Microsoft.WindowsAzure.Storage.Table;
-using Iap.Verify.Tables;
+using System;
+using System.Threading.Tasks;
 
 namespace Iap.Verify
 {
@@ -206,11 +204,15 @@ namespace Iap.Verify
                         TransactionId = purchase.OrderId,
                         OriginalTransactionId = receipt.TransactionId,
                         PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.StartTimeMillis.Value),
-                        ExpiryUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.ExpiryTimeMillis.Value),
+                        ExpiryUtc = purchase.ExpiryTimeMillis > 0
+                                    ? DateTime.UnixEpoch.AddMilliseconds(purchase.ExpiryTimeMillis.Value)
+                                    : (DateTime?)null,
                         ServerUtc = DateTime.UtcNow,
-                        IsExpired = DateTime.UnixEpoch
-                                            .AddMilliseconds(purchase.ExpiryTimeMillis.Value)
-                                            .AddDays(GraceDays).Date <= DateTime.UtcNow.Date,
+                        IsExpired = purchase.ExpiryTimeMillis > 0
+                                    ? DateTime.UnixEpoch
+                                              .AddMilliseconds(purchase.ExpiryTimeMillis.Value)
+                                              .AddDays(GraceDays).Date <= DateTime.UtcNow.Date
+                                    : false,
                         Token = receipt.Token,
                         DeveloperPayload = purchase.DeveloperPayload,
                     };
