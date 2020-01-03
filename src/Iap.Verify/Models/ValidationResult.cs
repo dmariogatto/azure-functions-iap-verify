@@ -1,4 +1,5 @@
 ﻿using System;
+
 namespace Iap.Verify.Models
 {
     public class ValidationResult
