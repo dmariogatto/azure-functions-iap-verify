@@ -1,19 +1,19 @@
-using System;
-using System.IO;
-using System.Threading.Tasks;
+using Iap.Verify.Models;
+using Iap.Verify.Tables;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
-using System.Net.Http;
-using Iap.Verify.Models;
-using Newtonsoft.Json.Linq;
-using System.Linq;
-using Newtonsoft.Json.Serialization;
-using Iap.Verify.Tables;
 using Microsoft.WindowsAzure.Storage.Table;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
+using System;
+using System.IO;
+using System.Linq;
+using System.Net.Http;
+using System.Threading.Tasks;
 
 namespace Iap.Verify
 {
