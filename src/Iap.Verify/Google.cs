@@ -8,13 +8,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Logging;
-using Microsoft.WindowsAzure.Storage.Table;
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Iap.Verify
 {
-    public static class Google
+    public class Google
     {
         private static readonly ServiceAccountCredential _credential = new ServiceAccountCredential
         (
@@ -33,27 +33,23 @@ namespace Iap.Verify
             }
         );
 
-        private static int _graceDays = -1;
-        public static int GraceDays
-        {
-            get
-            {
-                if (_graceDays < 0 &&
-                    !int.TryParse(Environment.GetEnvironmentVariable("GraceDays"), out _graceDays))
-                {
-                    _graceDays = 0;
-                }
+        private readonly IVerificationRepository _verificationRepository;
+        private readonly int _graceDays;
 
-                return _graceDays;
-            }
+        public Google(IVerificationRepository verificationRepository)
+        {
+            _verificationRepository = verificationRepository;
+
+            _graceDays = int.TryParse(Environment.GetEnvironmentVariable("GraceDays"), out var val)
+                ? val : 0;
         }
 
         [FunctionName(nameof(Google))]
-        public static async Task<IActionResult> Run(
+        public async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] Receipt receipt,
             HttpRequest req,
-            [Table(nameof(Google))] CloudTable verificationTable,
-            ILogger log)
+            ILogger log,
+            CancellationToken cancellationToken)
         {
             var result = default(ValidationResult);
 
@@ -70,8 +66,8 @@ namespace Iap.Verify
                     if (product != null)
                     {
                         result = product.PurchaseType == "subscription"
-                            ? await ValidateSubscription(receipt, log)
-                            : await ValidateProduct(receipt, log);
+                            ? await ValidateSubscriptionAsync(receipt, log, cancellationToken)
+                            : await ValidateProductAsync(receipt, log, cancellationToken);
                     }
                     else
                     {
@@ -89,7 +85,7 @@ namespace Iap.Verify
                 result = new ValidationResult(false, $"Invalid {nameof(Receipt)}");
             }
 
-            await Storage.SaveLog(verificationTable, receipt, result, log);
+            await _verificationRepository.SaveLogAsync(nameof(Google), receipt, result, cancellationToken);
 
             if (result.IsValid && result.ValidatedReceipt != null)
             {
@@ -110,14 +106,14 @@ namespace Iap.Verify
             return new BadRequestResult();
         }
 
-        private static async Task<ValidationResult> ValidateProduct(Receipt receipt, ILogger log)
+        private async Task<ValidationResult> ValidateProductAsync(Receipt receipt, ILogger log, CancellationToken cancellationToken)
         {
             var result = default(ValidationResult);
 
             try
             {
                 var request = _googleService.Purchases.Products.Get(receipt.BundleId, receipt.ProductId, receipt.Token);
-                var purchase = await request.ExecuteAsync();
+                var purchase = await request.ExecuteAsync(cancellationToken);
 
                 if (purchase != null)
                 {
@@ -167,14 +163,14 @@ namespace Iap.Verify
             return result;
         }
 
-        private static async Task<ValidationResult> ValidateSubscription(Receipt receipt, ILogger log)
+        private async Task<ValidationResult> ValidateSubscriptionAsync(Receipt receipt, ILogger log, CancellationToken cancellationToken)
         {
             var result = default(ValidationResult);
 
             try
             {
                 var request = _googleService.Purchases.Subscriptions.Get(receipt.BundleId, receipt.ProductId, receipt.Token);
-                var purchase = await request.ExecuteAsync();
+                var purchase = await request.ExecuteAsync(cancellationToken);
 
                 if (purchase != null)
                 {
@@ -211,7 +207,7 @@ namespace Iap.Verify
                         IsExpired = purchase.ExpiryTimeMillis > 0
                                     ? DateTime.UnixEpoch
                                               .AddMilliseconds(purchase.ExpiryTimeMillis.Value)
-                                              .AddDays(GraceDays).Date <= DateTime.UtcNow.Date
+                                              .AddDays(_graceDays).Date <= DateTime.UtcNow.Date
                                     : false,
                         Token = receipt.Token,
                         DeveloperPayload = purchase.DeveloperPayload,

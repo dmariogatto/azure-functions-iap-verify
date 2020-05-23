@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Logging;
-using Microsoft.WindowsAzure.Storage.Table;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
@@ -13,42 +12,44 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Iap.Verify
 {
-    public static class Apple
+    public class Apple
     {
         private const string AppleProductionUrl = "https://buy.itunes.apple.com/verifyReceipt";
         private const string AppleTestUrl = "https://sandbox.itunes.apple.com/verifyReceipt";
 
-        private static readonly HttpClient _httpClient = new HttpClient();
-        private static readonly JsonSerializer _serializer = new JsonSerializer()
-        {
-            ContractResolver = new DefaultContractResolver() { NamingStrategy = new SnakeCaseNamingStrategy() }
-        };
+        private readonly IVerificationRepository _verificationRepository;
 
-        private static int _graceDays = -1;
-        public static int GraceDays
+        private readonly HttpClient _httpClient;
+        private readonly JsonSerializer _serializer;
+        private readonly int _graceDays;
+
+        public Apple(
+            IHttpClientFactory httpClientFactory,
+            IVerificationRepository verificationRepository)
         {
-            get
+            _httpClient = httpClientFactory.CreateClient();
+            _verificationRepository = verificationRepository;
+
+            _serializer = new JsonSerializer()
             {
-                if (_graceDays < 0 &&
-                    !int.TryParse(Environment.GetEnvironmentVariable("GraceDays"), out _graceDays))
-                {
-                    _graceDays = 0;
-                }
+                ContractResolver = new DefaultContractResolver() { NamingStrategy = new SnakeCaseNamingStrategy() }
+            };
 
-                return _graceDays;
-            }
+            _graceDays = int.TryParse(Environment.GetEnvironmentVariable("GraceDays"), out var val)
+                ? val : 0;
         }
 
         [FunctionName(nameof(Apple))]
-        public static async Task<IActionResult> Run(
+        public async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] Receipt receipt,
             HttpRequest req,
-            [Table(nameof(Apple))] CloudTable verificationTable,
-            ILogger log)
+            ILogger log,
+            CancellationToken cancellationToken)
         {
             var result = default(ValidationResult);
                                    
@@ -57,12 +58,12 @@ namespace Iap.Verify
                 !string.IsNullOrEmpty(receipt?.TransactionId) &&
                 !string.IsNullOrEmpty(receipt?.Token))
             {
-                var appleResponse = await PostAppleReceipt(AppleProductionUrl, receipt, log);
+                var appleResponse = await PostAppleReceiptAsync(AppleProductionUrl, receipt, log, cancellationToken);
                 // Apple recommends calling production, then falling back to sandbox on an error code
                 if (appleResponse?.WrongEnvironment == true)
                 {
                     log.LogInformation("Sandbox purchase, calling test environment...");
-                    appleResponse = await PostAppleReceipt(AppleTestUrl, receipt, log);
+                    appleResponse = await PostAppleReceiptAsync(AppleTestUrl, receipt, log, cancellationToken);
                 }
 
                 if (appleResponse?.IsValid == true)
@@ -83,7 +84,7 @@ namespace Iap.Verify
                 result = new ValidationResult(false, $"Invalid {nameof(Receipt)}");
             }
 
-            await Storage.SaveLog(verificationTable, receipt, result, log);
+            await _verificationRepository.SaveLogAsync(nameof(Apple), receipt, result, cancellationToken);
 
             if (result.IsValid && result.ValidatedReceipt != null)
             {
@@ -104,7 +105,7 @@ namespace Iap.Verify
             return new BadRequestResult();
         }
 
-        private static async Task<AppleResponse> PostAppleReceipt(string url, Receipt receipt, ILogger log)
+        private async Task<AppleResponse> PostAppleReceiptAsync(string url, Receipt receipt, ILogger log, CancellationToken cancellationToken)
         {
             var appleResponse = default(AppleResponse);
 
@@ -119,7 +120,7 @@ namespace Iap.Verify
                     var json = new JObject(
                         new JProperty("receipt-data", receipt.Token),
                         new JProperty("password", appSecret)).ToString();
-                    var response = await _httpClient.PostAsync(url, new StringContent(json));
+                    var response = await _httpClient.PostAsync(url, new StringContent(json), cancellationToken);
                     response.EnsureSuccessStatusCode();
 
                     using (var stream = await response.Content.ReadAsStreamAsync())
@@ -138,7 +139,7 @@ namespace Iap.Verify
             return appleResponse;
         }
 
-        private static ValidationResult ValidateProduct(Receipt receipt, AppleResponse appleResponse, ILogger log)
+        private ValidationResult ValidateProduct(Receipt receipt, AppleResponse appleResponse, ILogger log)
         {
             var result = default(ValidationResult);
 
@@ -191,7 +192,7 @@ namespace Iap.Verify
                                 IsExpired = purchase.ExpiresDateMs > 0
                                             ? DateTime.UnixEpoch
                                                       .AddMilliseconds(purchase.ExpiresDateMs.Value)
-                                                      .AddDays(GraceDays).Date <= DateTime.UtcNow.Date
+                                                      .AddDays(_graceDays).Date <= DateTime.UtcNow.Date
                                             : false,
                                 Token = receipt.Token,
                                 DeveloperPayload = receipt.DeveloperPayload,
