@@ -1,3 +1,6 @@
+using Google.Apis.AndroidPublisher.v3;
+using Google.Apis.Auth.OAuth2;
+using Google.Apis.Services;
 using Iap.Verify;
 using Iap.Verify.Tables;
 using Microsoft.Azure.Cosmos.Table;
@@ -26,10 +29,32 @@ namespace Iap.Verify
             {
                 var config = serviceProvider.GetService<IConfiguration>();
                 var storageConnString =
-                    config["Values:AzureWebJobsStorage"] ??
+                    config["AzureWebJobsStorage"] ??
                     config.GetConnectionString("StorageConnectionString") ??
                     "UseDevelopmentStorage=true;";
                 return CloudStorageAccount.Parse(storageConnString);
+            });
+
+            builder.Services.AddSingleton(serviceProvider =>
+            {
+                var config = serviceProvider.GetService<IConfiguration>();
+                return new ServiceAccountCredential(
+                    new ServiceAccountCredential.Initializer(config["GoogleAccount"])
+                    {
+                        Scopes = new[] { AndroidPublisherService.Scope.Androidpublisher }
+                    }.FromPrivateKey(config["GoogleKey"].Replace("\\n", "\n"))
+                );
+            });
+
+            builder.Services.AddSingleton(serviceProvider =>
+            {
+                return new AndroidPublisherService(
+                    new BaseClientService.Initializer
+                    {
+                        HttpClientInitializer = serviceProvider.GetService<ServiceAccountCredential>(),
+                        ApplicationName = "Azure Function",
+                    }
+                );
             });
 
             builder.Services.AddSingleton(serviceProvider =>
@@ -40,7 +65,7 @@ namespace Iap.Verify
 
             builder.Services.AddHttpClient();
             builder.Services.AddLogging();
-            
+
             builder.Services.AddSingleton<IVerificationRepository, VerificationRepository>();
         }
     }

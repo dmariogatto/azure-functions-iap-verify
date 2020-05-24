@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -26,13 +27,16 @@ namespace Iap.Verify
 
         private readonly HttpClient _httpClient;
         private readonly JsonSerializer _serializer;
+        private readonly IConfiguration _configuration;
         private readonly int _graceDays;
 
         public Apple(
             IHttpClientFactory httpClientFactory,
+            IConfiguration configuration,
             IVerificationRepository verificationRepository)
         {
             _httpClient = httpClientFactory.CreateClient();
+            _configuration = configuration;
             _verificationRepository = verificationRepository;
 
             _serializer = new JsonSerializer()
@@ -40,7 +44,7 @@ namespace Iap.Verify
                 ContractResolver = new DefaultContractResolver() { NamingStrategy = new SnakeCaseNamingStrategy() }
             };
 
-            _graceDays = int.TryParse(Environment.GetEnvironmentVariable("GraceDays"), out var val)
+            _graceDays = int.TryParse(_configuration["GraceDays"], out var val)
                 ? val : 0;
         }
 
@@ -109,9 +113,9 @@ namespace Iap.Verify
         {
             var appleResponse = default(AppleResponse);
 
-            var appSecret = Environment.GetEnvironmentVariable($"AppleSecret.{receipt.BundleId}");
+            var appSecret = _configuration[$"AppleSecret.{receipt.BundleId}"];
             if (string.IsNullOrEmpty(appSecret))
-                appSecret = Environment.GetEnvironmentVariable("AppleSecret");
+                appSecret = _configuration["AppleSecret"];
 
             if (!string.IsNullOrEmpty(appSecret))
             {

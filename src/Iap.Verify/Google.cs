@@ -1,12 +1,11 @@
 using Google.Apis.AndroidPublisher.v3;
-using Google.Apis.Auth.OAuth2;
-using Google.Apis.Services;
 using Iap.Verify.Models;
 using Iap.Verify.Tables;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Threading;
@@ -16,31 +15,19 @@ namespace Iap.Verify
 {
     public class Google
     {
-        private static readonly ServiceAccountCredential _credential = new ServiceAccountCredential
-        (
-            new ServiceAccountCredential.Initializer(Environment.GetEnvironmentVariable("GoogleAccount"))
-            {
-                Scopes = new[] { AndroidPublisherService.Scope.Androidpublisher }
-            }.FromPrivateKey(Environment.GetEnvironmentVariable("GoogleKey").Replace("\\n", "\n"))
-        );
-
-        private static readonly AndroidPublisherService _googleService = new AndroidPublisherService
-        (
-            new BaseClientService.Initializer
-            {
-                HttpClientInitializer = _credential,
-                ApplicationName = "Azure Function",
-            }
-        );
-
+        private static AndroidPublisherService _googleService;
         private readonly IVerificationRepository _verificationRepository;
         private readonly int _graceDays;
 
-        public Google(IVerificationRepository verificationRepository)
+        public Google(
+            AndroidPublisherService googleService,
+            IVerificationRepository verificationRepository,
+            IConfiguration configuration)
         {
+            _googleService = googleService;
             _verificationRepository = verificationRepository;
 
-            _graceDays = int.TryParse(Environment.GetEnvironmentVariable("GraceDays"), out var val)
+            _graceDays = int.TryParse(configuration["GraceDays"], out var val)
                 ? val : 0;
         }
 
@@ -61,7 +48,8 @@ namespace Iap.Verify
             {
                 try
                 {
-                    var product = await _googleService.Inappproducts.Get(receipt.BundleId, receipt.ProductId).ExecuteAsync();
+                    var product = await _googleService.Inappproducts.Get(receipt.BundleId, receipt.ProductId)
+                        .ExecuteAsync(cancellationToken);
 
                     if (product != null)
                     {
