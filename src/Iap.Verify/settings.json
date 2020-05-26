@@ -1,0 +1,12 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "AzureWebJobsDashboard": "UseDevelopmentStorage=true",
+    "GraceDays": "3",
+    "GoogleAccount": "",
+    "GoogleKey": "",
+    "AppleSecret.{BundleId}": "",
+    "AppleSecret": ""
+  }
+}
