@@ -57,10 +57,7 @@ namespace Iap.Verify
         {
             var result = default(ValidationResult);
                                    
-            if (!string.IsNullOrEmpty(receipt?.BundleId) &&
-                !string.IsNullOrEmpty(receipt?.ProductId) &&
-                !string.IsNullOrEmpty(receipt?.TransactionId) &&
-                !string.IsNullOrEmpty(receipt?.Token))
+            if (receipt?.IsValid() == true)
             {
                 var appleResponse = await PostAppleReceiptAsync(AppleProductionUrl, receipt, log, cancellationToken);
                 // Apple recommends calling production, then falling back to sandbox on an error code

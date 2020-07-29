@@ -12,5 +12,11 @@ namespace Iap.Verify.Models
 
         [JsonIgnore]
         public string Environment { get; set; }
+
+        public bool IsValid() =>
+            !string.IsNullOrEmpty(BundleId) &&
+            !string.IsNullOrEmpty(ProductId) &&
+            !string.IsNullOrEmpty(TransactionId) &&
+            !string.IsNullOrEmpty(Token);
     }
 }
