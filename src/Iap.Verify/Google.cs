@@ -113,7 +113,7 @@ namespace Iap.Verify
                 {
                     result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.OrderId}'");
                 }
-                else if (!string.IsNullOrEmpty(receipt.DeveloperPayload) && purchase.DeveloperPayload != receipt.DeveloperPayload)
+                else if (!string.IsNullOrEmpty(purchase.DeveloperPayload) && purchase.DeveloperPayload != receipt.DeveloperPayload)
                 {
                     result = new ValidationResult(false, "DeveloperPayload did not match");
                 }
@@ -170,7 +170,7 @@ namespace Iap.Verify
                 {
                     result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.OrderId}'");
                 }
-                else if (purchase.DeveloperPayload != receipt.DeveloperPayload)
+                else if (!string.IsNullOrEmpty(purchase.DeveloperPayload) && purchase.DeveloperPayload != receipt.DeveloperPayload)
                 {
                     result = new ValidationResult(false, "DeveloperPayload did not match");
                 }                
