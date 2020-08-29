@@ -123,18 +123,20 @@ namespace Iap.Verify
                 }
                 else
                 {
-                    result = new ValidationResult(true);
-                    result.ValidatedReceipt = new ValidatedReceipt()
+                    result = new ValidationResult(true)
                     {
-                        BundleId = receipt.BundleId,
-                        ProductId = purchase.ProductId,
-                        TransactionId = receipt.TransactionId,
-                        OriginalTransactionId = purchase.OrderId,
-                        PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.PurchaseTimeMillis.Value),
-                        ServerUtc = DateTime.UtcNow,
-                        ExpiryUtc = (DateTime?)null,
-                        Token = receipt.Token,
-                        DeveloperPayload = receipt.DeveloperPayload,
+                        ValidatedReceipt = new ValidatedReceipt()
+                        {
+                            BundleId = receipt.BundleId,
+                            ProductId = purchase.ProductId,
+                            TransactionId = receipt.TransactionId,
+                            OriginalTransactionId = purchase.OrderId,
+                            PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.PurchaseTimeMillis.Value),
+                            ServerUtc = DateTime.UtcNow,
+                            ExpiryUtc = (DateTime?)null,
+                            Token = receipt.Token,
+                            DeveloperPayload = receipt.DeveloperPayload,
+                        }
                     };
                 }
             }
@@ -176,25 +178,26 @@ namespace Iap.Verify
                 }                
                 else
                 {
-                    result = new ValidationResult(true);
-                    result.ValidatedReceipt = new ValidatedReceipt()
+                    result = new ValidationResult(true)
                     {
-                        BundleId = receipt.BundleId,
-                        ProductId = receipt.ProductId,
-                        TransactionId = purchase.OrderId,
-                        OriginalTransactionId = receipt.TransactionId,
-                        PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.StartTimeMillis.Value),
-                        ExpiryUtc = purchase.ExpiryTimeMillis > 0
+                        ValidatedReceipt = new ValidatedReceipt()
+                        {
+                            BundleId = receipt.BundleId,
+                            ProductId = receipt.ProductId,
+                            TransactionId = purchase.OrderId,
+                            OriginalTransactionId = receipt.TransactionId,
+                            PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.StartTimeMillis.Value),
+                            ExpiryUtc = purchase.ExpiryTimeMillis > 0
                                     ? DateTime.UnixEpoch.AddMilliseconds(purchase.ExpiryTimeMillis.Value)
                                     : (DateTime?)null,
-                        ServerUtc = DateTime.UtcNow,
-                        IsExpired = purchase.ExpiryTimeMillis > 0
-                                    ? DateTime.UnixEpoch
-                                              .AddMilliseconds(purchase.ExpiryTimeMillis.Value)
-                                              .AddDays(_graceDays).Date <= DateTime.UtcNow.Date
-                                    : false,
-                        Token = receipt.Token,
-                        DeveloperPayload = purchase.DeveloperPayload,
+                            ServerUtc = DateTime.UtcNow,
+                            IsExpired = purchase.ExpiryTimeMillis > 0 &&
+                                        DateTime.UnixEpoch
+                                                .AddMilliseconds(purchase.ExpiryTimeMillis.Value)
+                                                .AddDays(_graceDays).Date <= DateTime.UtcNow.Date,
+                            Token = receipt.Token,
+                            DeveloperPayload = purchase.DeveloperPayload,
+                        }
                     };
                 }
             }

@@ -180,23 +180,24 @@ namespace Iap.Verify
                         }
                         else
                         {
-                            result = new ValidationResult(true);
-                            result.ValidatedReceipt = new ValidatedReceipt()
+                            result = new ValidationResult(true)
                             {
-                                BundleId = receipt.BundleId,
-                                ProductId = receipt.ProductId,
-                                TransactionId = purchase.TransactionId,
-                                OriginalTransactionId = purchase.OriginalTransactionId,
-                                PurchaseDateUtc = purchase.PurchaseDateUtc,
-                                ExpiryUtc = purchase.ExpiresDateUtc,
-                                ServerUtc = DateTime.UtcNow,
-                                IsExpired = purchase.ExpiresDateMs > 0
-                                            ? DateTime.UnixEpoch
-                                                      .AddMilliseconds(purchase.ExpiresDateMs.Value)
-                                                      .AddDays(_graceDays).Date <= DateTime.UtcNow.Date
-                                            : false,
-                                Token = receipt.Token,
-                                DeveloperPayload = receipt.DeveloperPayload,
+                                ValidatedReceipt = new ValidatedReceipt()
+                                {
+                                    BundleId = receipt.BundleId,
+                                    ProductId = receipt.ProductId,
+                                    TransactionId = purchase.TransactionId,
+                                    OriginalTransactionId = purchase.OriginalTransactionId,
+                                    PurchaseDateUtc = purchase.PurchaseDateUtc,
+                                    ExpiryUtc = purchase.ExpiresDateUtc,
+                                    ServerUtc = DateTime.UtcNow,
+                                    IsExpired = purchase.ExpiresDateMs > 0 &&
+                                            DateTime.UnixEpoch
+                                                    .AddMilliseconds(purchase.ExpiresDateMs.Value)
+                                                    .AddDays(_graceDays).Date <= DateTime.UtcNow.Date,
+                                    Token = receipt.Token,
+                                    DeveloperPayload = receipt.DeveloperPayload,
+                                }
                             };
                         }
                     }
