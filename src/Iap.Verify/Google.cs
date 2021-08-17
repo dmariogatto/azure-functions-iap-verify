@@ -56,7 +56,7 @@ namespace Iap.Verify
                     else
                     {
                         result = new ValidationResult(false, $"IAP '{receipt.BundleId}':'{receipt.ProductId}' not found");
-                    }                    
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -113,7 +113,9 @@ namespace Iap.Verify
                 {
                     result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.OrderId}'");
                 }
-                else if (!string.IsNullOrEmpty(purchase.DeveloperPayload) && purchase.DeveloperPayload != receipt.DeveloperPayload)
+                else if (!string.IsNullOrEmpty(purchase.DeveloperPayload) &&
+                         !string.IsNullOrEmpty(receipt.DeveloperPayload) &&
+                         purchase.DeveloperPayload != receipt.DeveloperPayload)
                 {
                     result = new ValidationResult(false, "DeveloperPayload did not match");
                 }
@@ -172,10 +174,12 @@ namespace Iap.Verify
                 {
                     result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.OrderId}'");
                 }
-                else if (!string.IsNullOrEmpty(purchase.DeveloperPayload) && purchase.DeveloperPayload != receipt.DeveloperPayload)
+                else if (!string.IsNullOrEmpty(purchase.DeveloperPayload) &&
+                         !string.IsNullOrEmpty(receipt.DeveloperPayload) &&
+                         purchase.DeveloperPayload != receipt.DeveloperPayload)
                 {
                     result = new ValidationResult(false, "DeveloperPayload did not match");
-                }                
+                }
                 else
                 {
                     result = new ValidationResult(true)
@@ -208,6 +212,6 @@ namespace Iap.Verify
             }
 
             return result;
-        }        
+        }
     }
 }

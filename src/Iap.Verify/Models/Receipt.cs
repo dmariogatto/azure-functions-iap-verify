@@ -10,6 +10,8 @@ namespace Iap.Verify.Models
         public string DeveloperPayload { get; set; }
         public string Token { get; set; }
 
+        public string AppVersion { get; set; }
+
         [JsonIgnore]
         public string Environment { get; set; }
 

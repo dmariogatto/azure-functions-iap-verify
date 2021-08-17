@@ -33,7 +33,7 @@ namespace Iap.Verify.Tables
             {
                 var cloudTable = _cloudTableClient.GetTableReference(tableName) ?? throw new NullReferenceException($"Reference to table '{tableName}' cannot be null!");
                 var entity = new Verification(receipt, validationResult);
-                await cloudTable.CreateIfNotExistsAsync(cancellationToken).ConfigureAwait(false);                
+                await cloudTable.CreateIfNotExistsAsync(cancellationToken).ConfigureAwait(false);
                 var insertOp = TableOperation.Insert(entity);
                 var exeResult = await cloudTable.ExecuteAsync(insertOp, cancellationToken).ConfigureAwait(false);
                 result = exeResult.HttpStatusCode >= 200 && exeResult.HttpStatusCode <= 299;

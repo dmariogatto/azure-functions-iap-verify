@@ -56,7 +56,7 @@ namespace Iap.Verify
             CancellationToken cancellationToken)
         {
             var result = default(ValidationResult);
-                                   
+
             if (receipt?.IsValid() == true)
             {
                 var appleResponse = await PostAppleReceiptAsync(AppleProductionUrl, receipt, log, cancellationToken);
@@ -210,6 +210,6 @@ namespace Iap.Verify
             }
 
             return result;
-        }        
+        }
     }
 }

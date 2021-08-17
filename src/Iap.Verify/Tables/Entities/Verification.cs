@@ -27,6 +27,7 @@ namespace Iap.Verify.Tables.Entities
             IsValid = validationResult.IsValid;
             Message = validationResult.Message ?? string.Empty;
             Environment = receipt.Environment ?? string.Empty;
+            AppVersion = receipt.AppVersion ?? string.Empty;
         }
 
         public string ProductId { get => PartitionKey; }
@@ -53,5 +54,6 @@ namespace Iap.Verify.Tables.Entities
         public bool IsValid { get; set; }
         public string Message { get; set; }
         public string Environment { get; set; }
+        public string AppVersion { get; set; }
     }
 }
