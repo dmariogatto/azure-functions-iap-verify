@@ -27,8 +27,7 @@ namespace Iap.Verify
             _googleService = googleService;
             _verificationRepository = verificationRepository;
 
-            _graceDays = int.TryParse(configuration["GraceDays"], out var val)
-                ? val : 0;
+            int.TryParse(configuration["GraceDays"], out _graceDays);
         }
 
         [FunctionName(nameof(Google))]
@@ -47,7 +46,7 @@ namespace Iap.Verify
                     var product = await _googleService.Inappproducts.Get(receipt.BundleId, receipt.ProductId)
                         .ExecuteAsync(cancellationToken);
 
-                    if (product != null)
+                    if (product is not null)
                     {
                         result = product.PurchaseType == "subscription"
                             ? await ValidateSubscriptionAsync(receipt, log, cancellationToken)
@@ -71,7 +70,7 @@ namespace Iap.Verify
 
             await _verificationRepository.SaveLogAsync(nameof(Google), receipt, result, cancellationToken);
 
-            if (result.IsValid && result.ValidatedReceipt != null)
+            if (result.IsValid && result.ValidatedReceipt is not null)
             {
                 log.LogInformation($"Validated IAP '{receipt.BundleId}':'{receipt.ProductId}'");
                 return new JsonResult(result.ValidatedReceipt);
@@ -99,13 +98,12 @@ namespace Iap.Verify
                 var request = _googleService.Purchases.Products.Get(receipt.BundleId, receipt.ProductId, receipt.Token);
                 var purchase = await request.ExecuteAsync(cancellationToken);
 
-                if (purchase != null)
+                if (purchase is not null)
                 {
-                    receipt.Environment = purchase.PurchaseType == 0
-                        ? "Test" : "Production";
+                    receipt.Environment = GetEnvironment(purchase.PurchaseType);
                 }
 
-                if (purchase == null)
+                if (purchase is null)
                 {
                     result = new ValidationResult(false, $"no purchase found");
                 }
@@ -135,7 +133,7 @@ namespace Iap.Verify
                             OriginalTransactionId = purchase.OrderId,
                             PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.PurchaseTimeMillis.Value),
                             ServerUtc = DateTime.UtcNow,
-                            ExpiryUtc = (DateTime?)null,
+                            ExpiryUtc = null,
                             Token = receipt.Token,
                             DeveloperPayload = receipt.DeveloperPayload,
                         }
@@ -160,13 +158,12 @@ namespace Iap.Verify
                 var request = _googleService.Purchases.Subscriptions.Get(receipt.BundleId, receipt.ProductId, receipt.Token);
                 var purchase = await request.ExecuteAsync(cancellationToken);
 
-                if (purchase != null)
+                if (purchase is not null)
                 {
-                    receipt.Environment = purchase.PurchaseType == 0
-                        ? "Test" : "Production";
+                    receipt.Environment = GetEnvironment(purchase.PurchaseType);
                 }
 
-                if (purchase == null)
+                if (purchase is null)
                 {
                     result = new ValidationResult(false, $"no purchase found");
                 }
@@ -193,7 +190,7 @@ namespace Iap.Verify
                             PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.StartTimeMillis.Value),
                             ExpiryUtc = purchase.ExpiryTimeMillis > 0
                                     ? DateTime.UnixEpoch.AddMilliseconds(purchase.ExpiryTimeMillis.Value)
-                                    : (DateTime?)null,
+                                    : null,
                             ServerUtc = DateTime.UtcNow,
                             IsExpired = purchase.ExpiryTimeMillis > 0 &&
                                         DateTime.UnixEpoch
@@ -213,5 +210,8 @@ namespace Iap.Verify
 
             return result;
         }
+
+        private static string GetEnvironment(int? purchaseType)
+            => purchaseType == 0 ? "Test" : "Production";
     }
 }

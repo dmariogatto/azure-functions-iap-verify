@@ -41,11 +41,13 @@ namespace Iap.Verify
 
             _serializer = new JsonSerializer()
             {
-                ContractResolver = new DefaultContractResolver() { NamingStrategy = new SnakeCaseNamingStrategy() }
+                ContractResolver = new DefaultContractResolver()
+                {
+                    NamingStrategy = new SnakeCaseNamingStrategy()
+                }
             };
 
-            _graceDays = int.TryParse(_configuration["GraceDays"], out var val)
-                ? val : 0;
+            int.TryParse(_configuration["GraceDays"], out _graceDays);
         }
 
         [FunctionName(nameof(Apple))]
@@ -87,7 +89,7 @@ namespace Iap.Verify
 
             await _verificationRepository.SaveLogAsync(nameof(Apple), receipt, result, cancellationToken);
 
-            if (result.IsValid && result.ValidatedReceipt != null)
+            if (result.IsValid && result.ValidatedReceipt is not null)
             {
                 log.LogInformation($"Validated IAP '{receipt.BundleId}':'{receipt.ProductId}'");
                 return new JsonResult(result.ValidatedReceipt);
@@ -118,18 +120,19 @@ namespace Iap.Verify
             {
                 try
                 {
-                    var json = new JObject(
-                        new JProperty("receipt-data", receipt.Token),
-                        new JProperty("password", appSecret)).ToString();
+                    var json = new JObject
+                        (
+                            new JProperty("receipt-data", receipt.Token),
+                            new JProperty("password", appSecret)
+                        ).ToString();
                     var response = await _httpClient.PostAsync(url, new StringContent(json), cancellationToken);
                     response.EnsureSuccessStatusCode();
 
-                    using (var stream = await response.Content.ReadAsStreamAsync())
-                    using (var reader = new StreamReader(stream))
-                    using (var jsonReader = new JsonTextReader(reader))
-                    {
-                        appleResponse = _serializer.Deserialize<AppleResponse>(jsonReader);
-                    }
+                    using var stream = await response.Content.ReadAsStreamAsync();
+                    using var reader = new StreamReader(stream);
+                    using var jsonReader = new JsonTextReader(reader);
+
+                    appleResponse = _serializer.Deserialize<AppleResponse>(jsonReader);
                 }
                 catch (Exception ex)
                 {
@@ -148,7 +151,7 @@ namespace Iap.Verify
             {
                 receipt.Environment = appleResponse.Environment;
 
-                if (appleResponse.Receipt == null)
+                if (appleResponse.Receipt is null)
                 {
                     result = new ValidationResult(false, "no receipt returned");
                 }
@@ -161,45 +164,40 @@ namespace Iap.Verify
                     var purchases = appleResponse.LatestReceiptInfo?.Any() == true
                         ? appleResponse.LatestReceiptInfo
                         : appleResponse.Receipt?.InApp;
-                    var purchase = purchases?.Any() == true
-                        ? purchases
-                            .Where(p => p.ProductId == receipt.ProductId)
-                            .OrderBy(p => p.PurchaseDateMs)
-                            .LastOrDefault()
-                        : null;
+                    var purchase = purchases
+                        ?.Where(p => p.ProductId == receipt.ProductId)
+                        ?.OrderBy(p => p.PurchaseDateMs)
+                        ?.LastOrDefault();
 
-                    if (purchase == null)
+                    if (purchase is null)
                     {
                         result = new ValidationResult(false, $"did not find '{receipt.ProductId}' in list of purchases");
                     }
+                    else if (receipt.TransactionId != purchase.TransactionId && receipt.TransactionId != purchase.OriginalTransactionId)
+                    {
+                        result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match either original '{purchase.OriginalTransactionId}', or '{purchase.TransactionId}'");
+                    }
                     else
                     {
-                        if (receipt.TransactionId != purchase.TransactionId && receipt.TransactionId != purchase.OriginalTransactionId)
+                        result = new ValidationResult(true)
                         {
-                            result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match either original '{purchase.OriginalTransactionId}', or '{purchase.TransactionId}'");
-                        }
-                        else
-                        {
-                            result = new ValidationResult(true)
+                            ValidatedReceipt = new ValidatedReceipt()
                             {
-                                ValidatedReceipt = new ValidatedReceipt()
-                                {
-                                    BundleId = receipt.BundleId,
-                                    ProductId = receipt.ProductId,
-                                    TransactionId = purchase.TransactionId,
-                                    OriginalTransactionId = purchase.OriginalTransactionId,
-                                    PurchaseDateUtc = purchase.PurchaseDateUtc,
-                                    ExpiryUtc = purchase.ExpiresDateUtc,
-                                    ServerUtc = DateTime.UtcNow,
-                                    IsExpired = purchase.ExpiresDateMs > 0 &&
-                                            DateTime.UnixEpoch
-                                                    .AddMilliseconds(purchase.ExpiresDateMs.Value)
-                                                    .AddDays(_graceDays).Date <= DateTime.UtcNow.Date,
-                                    Token = receipt.Token,
-                                    DeveloperPayload = receipt.DeveloperPayload,
-                                }
-                            };
-                        }
+                                BundleId = receipt.BundleId,
+                                ProductId = receipt.ProductId,
+                                TransactionId = purchase.TransactionId,
+                                OriginalTransactionId = purchase.OriginalTransactionId,
+                                PurchaseDateUtc = purchase.PurchaseDateUtc,
+                                ExpiryUtc = purchase.ExpiresDateUtc,
+                                ServerUtc = DateTime.UtcNow,
+                                IsExpired = purchase.ExpiresDateMs > 0 &&
+                                        DateTime.UnixEpoch
+                                                .AddMilliseconds(purchase.ExpiresDateMs.Value)
+                                                .AddDays(_graceDays).Date <= DateTime.UtcNow.Date,
+                                Token = receipt.Token,
+                                DeveloperPayload = receipt.DeveloperPayload,
+                            }
+                        };
                     }
                 }
             }
