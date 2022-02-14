@@ -4,7 +4,7 @@
     <AzureFunctionsVersion>v4</AzureFunctionsVersion>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.55.0.2526" />
+    <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.55.0.2582" />
     <PackageReference Include="Microsoft.Azure.Cosmos.Table" Version="1.0.8" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="6.0.0" />
     <PackageReference Include="Microsoft.NET.Sdk.Functions" Version="4.0.1" />
