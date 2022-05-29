@@ -1,6 +1,6 @@
-﻿using Iap.Verify.Models;
+﻿using Azure.Data.Tables;
+using Iap.Verify.Models;
 using Iap.Verify.Tables.Entities;
-using Microsoft.Azure.Cosmos.Table;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Threading;
@@ -10,16 +10,18 @@ namespace Iap.Verify.Tables
 {
     public class VerificationRepository : IVerificationRepository
     {
-        private readonly CloudTableClient _cloudTableClient;
-
-        private ILogger _logger;
+        private readonly string _connectionString;
+        private readonly ILogger _logger;
 
         public VerificationRepository(
-            CloudTableClient tableClient,
+            TableStorageOptions options,
             ILogger<VerificationRepository> logger)
         {
-            _cloudTableClient = tableClient ?? throw new ArgumentNullException(nameof(tableClient));
-           _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            if (string.IsNullOrEmpty(options?.AzureWebJobsStorage))
+                throw new ArgumentException(nameof(TableStorageOptions.AzureWebJobsStorage));
+
+            _connectionString = options.AzureWebJobsStorage;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public async Task<bool> SaveLogAsync(string tableName, Receipt receipt, ValidationResult validationResult, CancellationToken cancellationToken)
@@ -27,23 +29,22 @@ namespace Iap.Verify.Tables
             if (string.IsNullOrEmpty(tableName))
                 throw new ArgumentNullException(nameof(tableName));
 
-            var result = false;
+            var success = false;
 
             try
             {
-                var cloudTable = _cloudTableClient.GetTableReference(tableName) ?? throw new NullReferenceException($"Reference to table '{tableName}' cannot be null!");
+                var tableClient = new TableClient(_connectionString, tableName) ?? throw new NullReferenceException($"Reference to table '{tableName}' cannot be null!");
                 var entity = new Verification(receipt, validationResult);
-                await cloudTable.CreateIfNotExistsAsync(cancellationToken).ConfigureAwait(false);
-                var insertOp = TableOperation.Insert(entity);
-                var exeResult = await cloudTable.ExecuteAsync(insertOp, cancellationToken).ConfigureAwait(false);
-                result = exeResult.HttpStatusCode >= 200 && exeResult.HttpStatusCode <= 299;
+                await tableClient.CreateIfNotExistsAsync(cancellationToken).ConfigureAwait(false);
+                var resp = await tableClient.AddEntityAsync(entity, cancellationToken).ConfigureAwait(false);
+                success = resp.Status >= 200 && resp.Status <= 299;
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Failed to save log: {ex.Message}", ex);
             }
 
-            return result;
+            return success;
         }
     }
 }
