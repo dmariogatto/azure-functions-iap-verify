@@ -8,6 +8,7 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,7 +16,9 @@ namespace Iap.Verify
 {
     public class Google
     {
+        // https://developers.google.com/android-publisher/api-ref/rest
         private static AndroidPublisherService _googleService;
+
         private readonly IVerificationRepository _verificationRepository;
         private readonly int _graceDays;
 
@@ -98,10 +101,9 @@ namespace Iap.Verify
                 var request = _googleService.Purchases.Products.Get(receipt.BundleId, receipt.ProductId, receipt.Token);
                 var purchase = await request.ExecuteAsync(cancellationToken);
 
-                if (purchase is not null)
-                {
-                    receipt.Environment = GetEnvironment(purchase.PurchaseType);
-                }
+                receipt.Environment = purchase is null
+                    ? EnvironmentType.Unknown
+                    : purchase.PurchaseType == 0 ? EnvironmentType.Test : EnvironmentType.Production;
 
                 if (purchase is null)
                 {
@@ -110,12 +112,6 @@ namespace Iap.Verify
                 else if (!purchase.OrderId.StartsWith(receipt.TransactionId))
                 {
                     result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.OrderId}'");
-                }
-                else if (!string.IsNullOrEmpty(purchase.DeveloperPayload) &&
-                         !string.IsNullOrEmpty(receipt.DeveloperPayload) &&
-                         purchase.DeveloperPayload != receipt.DeveloperPayload)
-                {
-                    result = new ValidationResult(false, "DeveloperPayload did not match");
                 }
                 else if (purchase.PurchaseState != 0)
                 {
@@ -133,9 +129,7 @@ namespace Iap.Verify
                             OriginalTransactionId = purchase.OrderId,
                             PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.PurchaseTimeMillis.Value),
                             ServerUtc = DateTime.UtcNow,
-                            ExpiryUtc = null,
-                            Token = receipt.Token,
-                            DeveloperPayload = receipt.DeveloperPayload,
+                            Token = receipt.Token
                         }
                     };
                 }
@@ -155,49 +149,50 @@ namespace Iap.Verify
 
             try
             {
-                var request = _googleService.Purchases.Subscriptions.Get(receipt.BundleId, receipt.ProductId, receipt.Token);
+                var request = _googleService.Purchases.Subscriptionsv2.Get(receipt.BundleId, receipt.Token);
                 var purchase = await request.ExecuteAsync(cancellationToken);
 
-                if (purchase is not null)
-                {
-                    receipt.Environment = GetEnvironment(purchase.PurchaseType);
-                }
+                receipt.Environment = purchase is null
+                    ? EnvironmentType.Unknown
+                    : purchase.TestPurchase is not null ? EnvironmentType.Test : EnvironmentType.Production;
 
                 if (purchase is null)
                 {
                     result = new ValidationResult(false, $"no purchase found");
                 }
-                else if (!purchase.OrderId.StartsWith(receipt.TransactionId))
+                else if (!purchase.LatestOrderId.StartsWith(receipt.TransactionId))
                 {
-                    result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.OrderId}'");
-                }
-                else if (!string.IsNullOrEmpty(purchase.DeveloperPayload) &&
-                         !string.IsNullOrEmpty(receipt.DeveloperPayload) &&
-                         purchase.DeveloperPayload != receipt.DeveloperPayload)
-                {
-                    result = new ValidationResult(false, "DeveloperPayload did not match");
+                    result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.LatestOrderId}'");
                 }
                 else
                 {
-                    result = new ValidationResult(true)
+                    var utcNow = DateTime.UtcNow;
+
+                    var startTimeUtc = purchase.StartTime as DateTime? ?? DateTime.UnixEpoch;
+                    // If the order has been cancelled, then expiry time will set to the cancel date
+                    var expiryTimeUtc = purchase.LineItems
+                        ?.Select(i => i.ExpiryTime as DateTime?)
+                        ?.Where(i => i.HasValue)
+                        ?.OrderByDescending(i => i)
+                        ?.FirstOrDefault();
+
+                    result = new ValidationResult(true, purchase.SubscriptionState)
                     {
                         ValidatedReceipt = new ValidatedReceipt()
                         {
                             BundleId = receipt.BundleId,
                             ProductId = receipt.ProductId,
-                            TransactionId = purchase.OrderId,
+                            TransactionId = purchase.LatestOrderId,
                             OriginalTransactionId = receipt.TransactionId,
-                            PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.StartTimeMillis.Value),
-                            ExpiryUtc = purchase.ExpiryTimeMillis > 0
-                                    ? DateTime.UnixEpoch.AddMilliseconds(purchase.ExpiryTimeMillis.Value)
-                                    : null,
-                            ServerUtc = DateTime.UtcNow,
-                            IsExpired = purchase.ExpiryTimeMillis > 0 &&
-                                        DateTime.UnixEpoch
-                                                .AddMilliseconds(purchase.ExpiryTimeMillis.Value)
-                                                .AddDays(_graceDays).Date <= DateTime.UtcNow.Date,
-                            Token = receipt.Token,
-                            DeveloperPayload = purchase.DeveloperPayload,
+                            PurchaseDateUtc = startTimeUtc,
+                            ExpiryUtc = expiryTimeUtc,
+                            ServerUtc = utcNow,
+                            GraceDays = expiryTimeUtc.HasValue 
+                                        ? _graceDays 
+                                        : null,
+                            IsExpired = expiryTimeUtc.HasValue &&
+                                        expiryTimeUtc.Value.AddDays(_graceDays).Date <= utcNow.Date,
+                            Token = receipt.Token
                         }
                     };
                 }
@@ -210,8 +205,5 @@ namespace Iap.Verify
 
             return result;
         }
-
-        private static string GetEnvironment(int? purchaseType)
-            => purchaseType == 0 ? "Test" : "Production";
     }
 }

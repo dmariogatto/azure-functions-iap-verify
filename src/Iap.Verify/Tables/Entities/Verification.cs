@@ -22,11 +22,10 @@ namespace Iap.Verify.Tables.Entities
 
             BundleId = receipt.BundleId ?? string.Empty;
             TransactionId = receipt.TransactionId ?? string.Empty;
-            DeveloperPayload = receipt.DeveloperPayload ?? string.Empty;
             Token = receipt.Token ?? string.Empty;
             IsValid = validationResult.IsValid;
             Message = validationResult.Message ?? string.Empty;
-            Environment = receipt.Environment ?? string.Empty;
+            Environment = receipt.Environment != EnvironmentType.Unknown ? receipt.Environment.ToString() : string.Empty;
             AppVersion = receipt.AppVersion ?? string.Empty;
         }
 
@@ -50,7 +49,6 @@ namespace Iap.Verify.Tables.Entities
 
         public string BundleId { get; set; }
         public string TransactionId { get; set; }
-        public string DeveloperPayload { get; set; }
         public string Token { get; set; }
 
         public bool IsValid { get; set; }

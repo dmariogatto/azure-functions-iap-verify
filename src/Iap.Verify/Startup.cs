@@ -13,9 +13,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Iap.Verify
 {
-    public class Startup : IWebJobsStartup
+    public class Startup : FunctionsStartup
     {
-        public void Configure(IWebJobsBuilder builder)
+        public override void Configure(IFunctionsHostBuilder builder)
         {
             builder.Services.AddSingleton(serviceProvider =>
             {
