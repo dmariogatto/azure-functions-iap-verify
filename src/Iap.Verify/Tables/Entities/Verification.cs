@@ -1,11 +1,11 @@
 ﻿using Iap.Verify.Models;
-using Microsoft.Azure.Cosmos.Table;
 using System;
 using System.Globalization;
+using System.Runtime.Serialization;
 
 namespace Iap.Verify.Tables.Entities
 {
-    public class Verification : TableEntity
+    public class Verification : BaseTableStoreEntity
     {
         public Verification() { }
 
@@ -30,9 +30,11 @@ namespace Iap.Verify.Tables.Entities
             AppVersion = receipt.AppVersion ?? string.Empty;
         }
 
-        public string ProductId { get => PartitionKey; }
+        [IgnoreDataMember]
+        public string ProductId => PartitionKey;
 
         private long _epochMs = 0;
+        [IgnoreDataMember]
         public DateTime DateVerified
         {
             get
