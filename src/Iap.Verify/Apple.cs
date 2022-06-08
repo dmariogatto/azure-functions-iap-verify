@@ -150,7 +150,7 @@ namespace Iap.Verify
 
             try
             {
-                receipt.Environment = string.Equals(appleResponse.Environment, "Production", StringComparison.InvariantCultureIgnoreCase)
+                receipt.Environment = string.Equals(appleResponse.Environment, "Production", StringComparison.OrdinalIgnoreCase)
                     ? EnvironmentType.Production
                     : EnvironmentType.Test;
 
