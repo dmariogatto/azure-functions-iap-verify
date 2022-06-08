@@ -176,6 +176,22 @@ namespace Iap.Verify
                         ?.OrderByDescending(i => i)
                         ?.FirstOrDefault();
 
+                    var suspended = false;
+                    var graceDays = _graceDays;
+
+                    // Invalid states
+                    switch (purchase.SubscriptionState)
+                    {
+                        case "SUBSCRIPTION_STATE_PENDING":
+                        case "SUBSCRIPTION_STATE_PAUSED":
+                        case "SUBSCRIPTION_STATE_ON_HOLD":
+                            suspended = true;
+                            break;
+                        case "SUBSCRIPTION_STATE_CANCELED":
+                            graceDays = 0;
+                            break;
+                    }
+
                     result = new ValidationResult(true, purchase.SubscriptionState)
                     {
                         ValidatedReceipt = new ValidatedReceipt()
@@ -187,11 +203,12 @@ namespace Iap.Verify
                             PurchaseDateUtc = startTimeUtc,
                             ExpiryUtc = expiryTimeUtc,
                             ServerUtc = utcNow,
-                            GraceDays = expiryTimeUtc.HasValue 
-                                        ? _graceDays 
+                            GraceDays = expiryTimeUtc.HasValue
+                                        ? graceDays
                                         : null,
                             IsExpired = expiryTimeUtc.HasValue &&
-                                        expiryTimeUtc.Value.AddDays(_graceDays).Date <= utcNow.Date,
+                                        expiryTimeUtc.Value.AddDays(graceDays).Date <= utcNow.Date,
+                            IsSuspended = suspended,
                             Token = receipt.Token
                         }
                     };

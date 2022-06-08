@@ -19,6 +19,7 @@ namespace Iap.Verify.Models
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public int? GraceDays { get; set; }
         public bool IsExpired { get; set; }
+        public bool IsSuspended { get; set; }
 
         public string Token { get; set; }
     }

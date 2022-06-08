@@ -187,6 +187,7 @@ namespace Iap.Verify
                         var purchaseDateUtc = purchase.GetPurchaseDateUtc();
                         var expiresDateUtc = purchase.GetExpiresDateUtc();
                         var cancellationDateUtc = purchase.GetCancellationDateUtc();
+                        var graceDays = cancellationDateUtc.HasValue ? 0 : _graceDays;
 
                         var msg = string.Empty;
 
@@ -207,11 +208,12 @@ namespace Iap.Verify
                                 PurchaseDateUtc = purchaseDateUtc,
                                 ExpiryUtc = expiresDateUtc,
                                 ServerUtc = utcNow,
-                                GraceDays = expiresDateUtc.HasValue 
-                                            ? _graceDays 
+                                GraceDays = expiresDateUtc.HasValue
+                                            ? graceDays
                                             : null,
                                 IsExpired = expiresDateUtc.HasValue  &&
-                                            expiresDateUtc.Value.AddDays(_graceDays).Date <= utcNow.Date,
+                                            expiresDateUtc.Value.AddDays(graceDays).Date <= utcNow.Date,
+                                IsSuspended = false,
                                 Token = receipt.Token
                             }
                         };
