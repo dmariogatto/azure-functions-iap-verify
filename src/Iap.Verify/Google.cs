@@ -51,7 +51,7 @@ namespace Iap.Verify
 
                     if (product is not null)
                     {
-                        result = product.PurchaseType == "subscription"
+                        result = string.Equals(product.PurchaseType, "subscription", StringComparison.OrdinalIgnoreCase)
                             ? await ValidateSubscriptionAsync(receipt, log, cancellationToken)
                             : await ValidateProductAsync(receipt, log, cancellationToken);
                     }
