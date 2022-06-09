@@ -158,7 +158,7 @@ namespace Iap.Verify
                 {
                     result = new ValidationResult(false, "no receipt returned");
                 }
-                else if (appleResponse.Receipt.BundleId != receipt.BundleId)
+                else if (!string.Equals(appleResponse.Receipt.BundleId, receipt.BundleId, StringComparison.Ordinal))
                 {
                     result = new ValidationResult(false, $"bundle id '{receipt.BundleId}' does not match '{appleResponse.Receipt.BundleId}'");
                 }
@@ -176,7 +176,8 @@ namespace Iap.Verify
                     {
                         result = new ValidationResult(false, $"did not find '{receipt.ProductId}' in list of purchases");
                     }
-                    else if (receipt.TransactionId != purchase.TransactionId && receipt.TransactionId != purchase.OriginalTransactionId)
+                    else if (!string.Equals(receipt.TransactionId, purchase.TransactionId, StringComparison.Ordinal) &&
+                             !string.Equals(receipt.TransactionId, purchase.OriginalTransactionId, StringComparison.Ordinal))
                     {
                         result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match either original '{purchase.OriginalTransactionId}', or '{purchase.TransactionId}'");
                     }

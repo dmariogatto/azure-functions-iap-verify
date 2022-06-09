@@ -1,4 +1,5 @@
 using Google.Apis.AndroidPublisher.v3;
+using Google.Apis.AndroidPublisher.v3.Data;
 using Iap.Verify.Models;
 using Iap.Verify.Tables;
 using Microsoft.AspNetCore.Http;
@@ -44,26 +45,23 @@ namespace Iap.Verify
 
             if (receipt?.IsValid() == true)
             {
-                try
+                var iapTask = GetInAppProductAsync(receipt.BundleId, receipt.ProductId, cancellationToken);
+                var subTask = GetSubscriptionAsync(receipt.BundleId, receipt.ProductId, cancellationToken);
+                
+                if (await iapTask is not null)
                 {
-                    var product = await _googleService.Inappproducts.Get(receipt.BundleId, receipt.ProductId)
-                        .ExecuteAsync(cancellationToken);
-
-                    if (product is not null)
-                    {
-                        result = string.Equals(product.PurchaseType, "subscription", StringComparison.OrdinalIgnoreCase)
-                            ? await ValidateSubscriptionAsync(receipt, log, cancellationToken)
-                            : await ValidateProductAsync(receipt, log, cancellationToken);
-                    }
-                    else
-                    {
-                        result = new ValidationResult(false, $"IAP '{receipt.BundleId}':'{receipt.ProductId}' not found");
-                    }
+                    // Support legacy subscriptions
+                    result = string.Equals(iapTask.Result.PurchaseType, "subscription", StringComparison.OrdinalIgnoreCase)
+                        ? await ValidateSubscriptionAsync(receipt, log, cancellationToken)
+                        : await ValidateProductAsync(receipt, log, cancellationToken);
                 }
-                catch (Exception ex)
+                else if (await subTask is not null)
                 {
-                    log.LogError($"Failed to validate IAP: {ex.Message}", ex);
-                    result = new ValidationResult(false, ex.Message);
+                    result = await ValidateSubscriptionAsync(receipt, log, cancellationToken);
+                }
+                else
+                {
+                    result = new ValidationResult(false, $"IAP '{receipt.BundleId}':'{receipt.ProductId}' not found");
                 }
             }
             else
@@ -109,7 +107,7 @@ namespace Iap.Verify
                 {
                     result = new ValidationResult(false, $"no purchase found");
                 }
-                else if (!purchase.OrderId.StartsWith(receipt.TransactionId))
+                else if (!purchase.OrderId.StartsWith(receipt.TransactionId, StringComparison.Ordinal))
                 {
                     result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.OrderId}'");
                 }
@@ -160,7 +158,7 @@ namespace Iap.Verify
                 {
                     result = new ValidationResult(false, $"no purchase found");
                 }
-                else if (!purchase.LatestOrderId.StartsWith(receipt.TransactionId))
+                else if (!purchase.LatestOrderId.StartsWith(receipt.TransactionId, StringComparison.Ordinal))
                 {
                     result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.LatestOrderId}'");
                 }
@@ -218,6 +216,51 @@ namespace Iap.Verify
             {
                 log.LogError($"Failed to validate subscription: {ex.Message}", ex);
                 result = new ValidationResult(false, ex.Message);
+            }
+
+            return result;
+        }
+
+        private async Task<InAppProduct> GetInAppProductAsync(string bundleId, string productId, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(bundleId) || string.IsNullOrEmpty(productId))
+                return null;
+
+            var result = default(InAppProduct);
+
+            try
+            {
+                result = await _googleService
+                    .Inappproducts
+                    .Get(bundleId, productId)
+                    .ExecuteAsync(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+            }
+
+            return result;
+        }
+
+        private async Task<Subscription> GetSubscriptionAsync(string bundleId, string productId, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(bundleId) || string.IsNullOrEmpty(productId))
+                return null;
+
+            var result = default(Subscription);
+
+            try
+            {
+                result = await _googleService
+                    .Monetization
+                    .Subscriptions
+                    .Get(bundleId, productId)
+                    .ExecuteAsync(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
             }
 
             return result;
