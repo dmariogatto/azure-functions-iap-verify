@@ -5,16 +5,17 @@ namespace Iap.Verify.Models
     public static class AppleInAppExtensions
     {
         public static DateTime GetPurchaseDateUtc(this IAppleInApp inApp)
-            => long.TryParse(inApp?.PurchaseDateMs, out var ms)
-               ? DateTime.UnixEpoch.AddMilliseconds(ms)
-               : DateTime.UnixEpoch;
+            => EpochMsToDateTimeUtc(inApp?.PurchaseDateMs, DateTime.UnixEpoch).Value;
+
         public static DateTime? GetExpiresDateUtc(this IAppleInApp inApp)
-            => long.TryParse(inApp?.ExpiresDateMs, out var ms)
-               ? DateTime.UnixEpoch.AddMilliseconds(ms)
-               : (DateTime?)null;
+            => EpochMsToDateTimeUtc(inApp?.ExpiresDateMs);
+
         public static DateTime? GetCancellationDateUtc(this IAppleInApp inApp)
-            => long.TryParse(inApp?.CancellationDateMs, out var ms)
+            => EpochMsToDateTimeUtc(inApp?.CancellationDateMs);
+
+        public static DateTime? EpochMsToDateTimeUtc(string dateMs, DateTime? defaultValue = null)
+            => !string.IsNullOrEmpty(dateMs) && long.TryParse(dateMs, out var ms)
                ? DateTime.UnixEpoch.AddMilliseconds(ms)
-               : (DateTime?)null;
+               : defaultValue;
     }
 }

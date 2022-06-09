@@ -188,7 +188,7 @@ namespace Iap.Verify
                         var purchaseDateUtc = purchase.GetPurchaseDateUtc();
                         var expiresDateUtc = purchase.GetExpiresDateUtc();
                         var cancellationDateUtc = purchase.GetCancellationDateUtc();
-                        var graceDays = cancellationDateUtc.HasValue ? 0 : _graceDays;
+                        var graceDays = _graceDays;
 
                         var msg = string.Empty;
 
@@ -196,6 +196,7 @@ namespace Iap.Verify
                         {
                             msg = "App Store refunded a transaction or revoked it from family sharing";
                             expiresDateUtc = cancellationDateUtc;
+                            graceDays = 0;
                         }
 
                         result = new ValidationResult(true, msg)
