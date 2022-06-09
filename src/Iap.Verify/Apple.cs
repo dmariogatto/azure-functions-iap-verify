@@ -214,7 +214,7 @@ namespace Iap.Verify
                                             ? graceDays
                                             : null,
                                 IsExpired = expiresDateUtc.HasValue  &&
-                                            expiresDateUtc.Value.AddDays(graceDays).Date <= utcNow.Date,
+                                            expiresDateUtc.Value.AddDays(graceDays) <= utcNow,
                                 IsSuspended = false,
                                 Token = receipt.Token
                             }
