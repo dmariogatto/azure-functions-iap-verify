@@ -192,7 +192,7 @@ namespace Iap.Verify
 
                         var msg = string.Empty;
 
-                        if (cancellationDateUtc <= utcNow)
+                        if (cancellationDateUtc.HasValue)
                         {
                             msg = "App Store refunded a transaction or revoked it from family sharing";
                             expiresDateUtc = cancellationDateUtc;
