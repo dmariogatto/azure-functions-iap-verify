@@ -31,7 +31,7 @@ namespace Iap.Verify
             _googleService = googleService;
             _verificationRepository = verificationRepository;
 
-            int.TryParse(configuration["GraceDays"], out _graceDays);
+            int.TryParse(configuration[Startup.GraceDaysKey], out _graceDays);
         }
 
         [FunctionName(nameof(Google))]

@@ -13,6 +13,8 @@ namespace Iap.Verify
 {
     public class Startup : FunctionsStartup
     {
+        public const string GraceDaysKey = "GraceDays";
+
         public override void Configure(IFunctionsHostBuilder builder)
         {
             builder.Services.AddSingleton(serviceProvider =>

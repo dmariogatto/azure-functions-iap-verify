@@ -46,7 +46,7 @@ namespace Iap.Verify
                 }
             };
 
-            int.TryParse(_configuration["GraceDays"], out _graceDays);
+            int.TryParse(_configuration[Startup.GraceDaysKey], out _graceDays);
         }
 
         [FunctionName(nameof(Apple))]
