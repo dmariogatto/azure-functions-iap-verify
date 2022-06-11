@@ -169,17 +169,12 @@ namespace Iap.Verify
                         : appleResponse.Receipt?.InApp?.OfType<IAppleInApp>();
                     var purchase = purchases
                         ?.Where(p => p.ProductId == receipt.ProductId)
-                        ?.OrderBy(p => p.PurchaseDateMs)
-                        ?.LastOrDefault();
+                        ?.OrderByDescending(p => long.TryParse(p.PurchaseDateMs, out var ms) ? ms : long.MaxValue)
+                        ?.FirstOrDefault();
 
                     if (purchase is null)
                     {
                         result = new ValidationResult(false, $"did not find '{receipt.ProductId}' in list of purchases");
-                    }
-                    else if (!string.Equals(receipt.TransactionId, purchase.TransactionId, StringComparison.Ordinal) &&
-                             !string.Equals(receipt.TransactionId, purchase.OriginalTransactionId, StringComparison.Ordinal))
-                    {
-                        result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match either original '{purchase.OriginalTransactionId}', or '{purchase.TransactionId}'");
                     }
                     else
                     {
