@@ -7,7 +7,7 @@ namespace Iap.Verify.Models
         public ValidationResult(bool isValid, string msg)
         {
             IsValid = isValid;
-            Message = msg;
+            Message = msg ?? string.Empty;
         }
 
         public ValidationResult(bool isValid)

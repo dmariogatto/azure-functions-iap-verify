@@ -7,7 +7,6 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using System;
 using System.IO;
@@ -47,7 +46,7 @@ namespace Iap.Verify
                 }
             };
 
-            int.TryParse(_configuration["GraceDays"], out _graceDays);
+            int.TryParse(_configuration[Startup.GraceDaysKey], out _graceDays);
         }
 
         [FunctionName(nameof(Apple))]
@@ -120,12 +119,14 @@ namespace Iap.Verify
             {
                 try
                 {
-                    var json = new JObject
-                        (
-                            new JProperty("receipt-data", receipt.Token),
-                            new JProperty("password", appSecret)
-                        ).ToString();
-                    var response = await _httpClient.PostAsync(url, new StringContent(json), cancellationToken);
+                    var request = new AppleRequest()
+                    {
+                        ReceiptData = receipt.Token,
+                        Password = appSecret
+                    };
+
+                    var postBody = new StringContent(JsonConvert.SerializeObject(request));
+                    var response = await _httpClient.PostAsync(url, postBody, cancellationToken);
                     response.EnsureSuccessStatusCode();
 
                     using var stream = await response.Content.ReadAsStreamAsync();
@@ -149,37 +150,51 @@ namespace Iap.Verify
 
             try
             {
-                receipt.Environment = appleResponse.Environment;
+                receipt.Environment = string.Equals(appleResponse.Environment, "Production", StringComparison.OrdinalIgnoreCase)
+                    ? EnvironmentType.Production
+                    : EnvironmentType.Test;
 
                 if (appleResponse.Receipt is null)
                 {
                     result = new ValidationResult(false, "no receipt returned");
                 }
-                else if (appleResponse.Receipt.BundleId != receipt.BundleId)
+                else if (!string.Equals(appleResponse.Receipt.BundleId, receipt.BundleId, StringComparison.Ordinal))
                 {
                     result = new ValidationResult(false, $"bundle id '{receipt.BundleId}' does not match '{appleResponse.Receipt.BundleId}'");
                 }
                 else
                 {
                     var purchases = appleResponse.LatestReceiptInfo?.Any() == true
-                        ? appleResponse.LatestReceiptInfo
-                        : appleResponse.Receipt?.InApp;
+                        ? appleResponse.LatestReceiptInfo.OfType<IAppleInApp>()
+                        : appleResponse.Receipt?.InApp?.OfType<IAppleInApp>();
                     var purchase = purchases
                         ?.Where(p => p.ProductId == receipt.ProductId)
-                        ?.OrderBy(p => p.PurchaseDateMs)
-                        ?.LastOrDefault();
+                        ?.OrderByDescending(p => long.TryParse(p.PurchaseDateMs, out var ms) ? ms : long.MaxValue)
+                        ?.FirstOrDefault();
 
                     if (purchase is null)
                     {
                         result = new ValidationResult(false, $"did not find '{receipt.ProductId}' in list of purchases");
                     }
-                    else if (receipt.TransactionId != purchase.TransactionId && receipt.TransactionId != purchase.OriginalTransactionId)
-                    {
-                        result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match either original '{purchase.OriginalTransactionId}', or '{purchase.TransactionId}'");
-                    }
                     else
                     {
-                        result = new ValidationResult(true)
+                        var utcNow = DateTime.UtcNow;
+
+                        var purchaseDateUtc = purchase.GetPurchaseDateUtc();
+                        var expiresDateUtc = purchase.GetExpiresDateUtc();
+                        var cancellationDateUtc = purchase.GetCancellationDateUtc();
+                        var graceDays = _graceDays;
+
+                        var msg = string.Empty;
+
+                        if (cancellationDateUtc.HasValue)
+                        {
+                            msg = "App Store refunded a transaction or revoked it from family sharing";
+                            expiresDateUtc = cancellationDateUtc;
+                            graceDays = 0;
+                        }
+
+                        result = new ValidationResult(true, msg)
                         {
                             ValidatedReceipt = new ValidatedReceipt()
                             {
@@ -187,15 +202,16 @@ namespace Iap.Verify
                                 ProductId = receipt.ProductId,
                                 TransactionId = purchase.TransactionId,
                                 OriginalTransactionId = purchase.OriginalTransactionId,
-                                PurchaseDateUtc = purchase.PurchaseDateUtc,
-                                ExpiryUtc = purchase.ExpiresDateUtc,
-                                ServerUtc = DateTime.UtcNow,
-                                IsExpired = purchase.ExpiresDateMs > 0 &&
-                                        DateTime.UnixEpoch
-                                                .AddMilliseconds(purchase.ExpiresDateMs.Value)
-                                                .AddDays(_graceDays).Date <= DateTime.UtcNow.Date,
-                                Token = receipt.Token,
-                                DeveloperPayload = receipt.DeveloperPayload,
+                                PurchaseDateUtc = purchaseDateUtc,
+                                ExpiryUtc = expiresDateUtc,
+                                ServerUtc = utcNow,
+                                GraceDays = expiresDateUtc.HasValue
+                                            ? graceDays
+                                            : null,
+                                IsExpired = expiresDateUtc.HasValue  &&
+                                            expiresDateUtc.Value.AddDays(graceDays) <= utcNow,
+                                IsSuspended = false,
+                                Token = receipt.Token
                             }
                         };
                     }

@@ -1,4 +1,5 @@
 using Google.Apis.AndroidPublisher.v3;
+using Google.Apis.AndroidPublisher.v3.Data;
 using Iap.Verify.Models;
 using Iap.Verify.Tables;
 using Microsoft.AspNetCore.Http;
@@ -8,6 +9,7 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,7 +17,9 @@ namespace Iap.Verify
 {
     public class Google
     {
+        // https://developers.google.com/android-publisher/api-ref/rest
         private static AndroidPublisherService _googleService;
+
         private readonly IVerificationRepository _verificationRepository;
         private readonly int _graceDays;
 
@@ -27,7 +31,7 @@ namespace Iap.Verify
             _googleService = googleService;
             _verificationRepository = verificationRepository;
 
-            int.TryParse(configuration["GraceDays"], out _graceDays);
+            int.TryParse(configuration[Startup.GraceDaysKey], out _graceDays);
         }
 
         [FunctionName(nameof(Google))]
@@ -41,26 +45,23 @@ namespace Iap.Verify
 
             if (receipt?.IsValid() == true)
             {
-                try
+                var iapTask = GetInAppProductAsync(receipt.BundleId, receipt.ProductId, cancellationToken);
+                var subTask = GetSubscriptionAsync(receipt.BundleId, receipt.ProductId, cancellationToken);
+                
+                if (await iapTask is not null)
                 {
-                    var product = await _googleService.Inappproducts.Get(receipt.BundleId, receipt.ProductId)
-                        .ExecuteAsync(cancellationToken);
-
-                    if (product is not null)
-                    {
-                        result = product.PurchaseType == "subscription"
-                            ? await ValidateSubscriptionAsync(receipt, log, cancellationToken)
-                            : await ValidateProductAsync(receipt, log, cancellationToken);
-                    }
-                    else
-                    {
-                        result = new ValidationResult(false, $"IAP '{receipt.BundleId}':'{receipt.ProductId}' not found");
-                    }
+                    // Support legacy subscriptions
+                    result = string.Equals(iapTask.Result.PurchaseType, "subscription", StringComparison.OrdinalIgnoreCase)
+                        ? await ValidateSubscriptionAsync(receipt, log, cancellationToken)
+                        : await ValidateProductAsync(receipt, log, cancellationToken);
                 }
-                catch (Exception ex)
+                else if (await subTask is not null)
                 {
-                    log.LogError($"Failed to validate IAP: {ex.Message}", ex);
-                    result = new ValidationResult(false, ex.Message);
+                    result = await ValidateSubscriptionAsync(receipt, log, cancellationToken);
+                }
+                else
+                {
+                    result = new ValidationResult(false, $"IAP '{receipt.BundleId}':'{receipt.ProductId}' not found");
                 }
             }
             else
@@ -98,24 +99,17 @@ namespace Iap.Verify
                 var request = _googleService.Purchases.Products.Get(receipt.BundleId, receipt.ProductId, receipt.Token);
                 var purchase = await request.ExecuteAsync(cancellationToken);
 
-                if (purchase is not null)
-                {
-                    receipt.Environment = GetEnvironment(purchase.PurchaseType);
-                }
+                receipt.Environment = purchase is null
+                    ? EnvironmentType.Unknown
+                    : purchase.PurchaseType == 0 ? EnvironmentType.Test : EnvironmentType.Production;
 
                 if (purchase is null)
                 {
                     result = new ValidationResult(false, $"no purchase found");
                 }
-                else if (!purchase.OrderId.StartsWith(receipt.TransactionId))
+                else if (!purchase.OrderId.StartsWith(receipt.TransactionId, StringComparison.Ordinal))
                 {
                     result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.OrderId}'");
-                }
-                else if (!string.IsNullOrEmpty(purchase.DeveloperPayload) &&
-                         !string.IsNullOrEmpty(receipt.DeveloperPayload) &&
-                         purchase.DeveloperPayload != receipt.DeveloperPayload)
-                {
-                    result = new ValidationResult(false, "DeveloperPayload did not match");
                 }
                 else if (purchase.PurchaseState != 0)
                 {
@@ -133,9 +127,7 @@ namespace Iap.Verify
                             OriginalTransactionId = purchase.OrderId,
                             PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.PurchaseTimeMillis.Value),
                             ServerUtc = DateTime.UtcNow,
-                            ExpiryUtc = null,
-                            Token = receipt.Token,
-                            DeveloperPayload = receipt.DeveloperPayload,
+                            Token = receipt.Token
                         }
                     };
                 }
@@ -155,49 +147,67 @@ namespace Iap.Verify
 
             try
             {
-                var request = _googleService.Purchases.Subscriptions.Get(receipt.BundleId, receipt.ProductId, receipt.Token);
+                var request = _googleService.Purchases.Subscriptionsv2.Get(receipt.BundleId, receipt.Token);
                 var purchase = await request.ExecuteAsync(cancellationToken);
 
-                if (purchase is not null)
-                {
-                    receipt.Environment = GetEnvironment(purchase.PurchaseType);
-                }
+                receipt.Environment = purchase is null
+                    ? EnvironmentType.Unknown
+                    : purchase.TestPurchase is not null ? EnvironmentType.Test : EnvironmentType.Production;
 
                 if (purchase is null)
                 {
                     result = new ValidationResult(false, $"no purchase found");
                 }
-                else if (!purchase.OrderId.StartsWith(receipt.TransactionId))
+                else if (!purchase.LatestOrderId.StartsWith(receipt.TransactionId, StringComparison.Ordinal))
                 {
-                    result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.OrderId}'");
-                }
-                else if (!string.IsNullOrEmpty(purchase.DeveloperPayload) &&
-                         !string.IsNullOrEmpty(receipt.DeveloperPayload) &&
-                         purchase.DeveloperPayload != receipt.DeveloperPayload)
-                {
-                    result = new ValidationResult(false, "DeveloperPayload did not match");
+                    result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.LatestOrderId}'");
                 }
                 else
                 {
-                    result = new ValidationResult(true)
+                    var utcNow = DateTime.UtcNow;
+
+                    var startTimeUtc = purchase.StartTime as DateTime? ?? DateTime.UnixEpoch;
+                    // If the order has been cancelled, then expiry time will set to the cancel date
+                    var expiryTimeUtc = purchase.LineItems
+                        ?.Select(i => i.ExpiryTime as DateTime?)
+                        ?.Where(i => i.HasValue)
+                        ?.OrderByDescending(i => i)
+                        ?.FirstOrDefault();
+
+                    var suspended = false;
+                    var graceDays = _graceDays;
+
+                    // Invalid states
+                    switch (purchase.SubscriptionState)
+                    {
+                        case "SUBSCRIPTION_STATE_PENDING":
+                        case "SUBSCRIPTION_STATE_PAUSED":
+                        case "SUBSCRIPTION_STATE_ON_HOLD":
+                            suspended = true;
+                            break;
+                        case "SUBSCRIPTION_STATE_CANCELED":
+                            graceDays = 0;
+                            break;
+                    }
+
+                    result = new ValidationResult(true, purchase.SubscriptionState)
                     {
                         ValidatedReceipt = new ValidatedReceipt()
                         {
                             BundleId = receipt.BundleId,
                             ProductId = receipt.ProductId,
-                            TransactionId = purchase.OrderId,
+                            TransactionId = purchase.LatestOrderId,
                             OriginalTransactionId = receipt.TransactionId,
-                            PurchaseDateUtc = DateTime.UnixEpoch.AddMilliseconds(purchase.StartTimeMillis.Value),
-                            ExpiryUtc = purchase.ExpiryTimeMillis > 0
-                                    ? DateTime.UnixEpoch.AddMilliseconds(purchase.ExpiryTimeMillis.Value)
-                                    : null,
-                            ServerUtc = DateTime.UtcNow,
-                            IsExpired = purchase.ExpiryTimeMillis > 0 &&
-                                        DateTime.UnixEpoch
-                                                .AddMilliseconds(purchase.ExpiryTimeMillis.Value)
-                                                .AddDays(_graceDays).Date <= DateTime.UtcNow.Date,
-                            Token = receipt.Token,
-                            DeveloperPayload = purchase.DeveloperPayload,
+                            PurchaseDateUtc = startTimeUtc,
+                            ExpiryUtc = expiryTimeUtc,
+                            ServerUtc = utcNow,
+                            GraceDays = expiryTimeUtc.HasValue
+                                        ? graceDays
+                                        : null,
+                            IsExpired = expiryTimeUtc.HasValue &&
+                                        expiryTimeUtc.Value.AddDays(graceDays) <= utcNow,
+                            IsSuspended = suspended,
+                            Token = receipt.Token
                         }
                     };
                 }
@@ -211,7 +221,49 @@ namespace Iap.Verify
             return result;
         }
 
-        private static string GetEnvironment(int? purchaseType)
-            => purchaseType == 0 ? "Test" : "Production";
+        private async Task<InAppProduct> GetInAppProductAsync(string bundleId, string productId, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(bundleId) || string.IsNullOrEmpty(productId))
+                return null;
+
+            var result = default(InAppProduct);
+
+            try
+            {
+                result = await _googleService
+                    .Inappproducts
+                    .Get(bundleId, productId)
+                    .ExecuteAsync(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+            }
+
+            return result;
+        }
+
+        private async Task<Subscription> GetSubscriptionAsync(string bundleId, string productId, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(bundleId) || string.IsNullOrEmpty(productId))
+                return null;
+
+            var result = default(Subscription);
+
+            try
+            {
+                result = await _googleService
+                    .Monetization
+                    .Subscriptions
+                    .Get(bundleId, productId)
+                    .ExecuteAsync(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+            }
+
+            return result;
+        }
     }
 }

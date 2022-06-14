@@ -1,33 +1,52 @@
-﻿using System.Collections.Generic;
+﻿using Newtonsoft.Json;
+using System.Collections.Generic;
 
 namespace Iap.Verify.Models
 {
     /// <summary>
-    /// See, https://developer.apple.com/library/archive/releasenotes/General/ValidateAppStoreReceipt/Chapters/ValidateRemotely.html
+    /// The data returned in the response from the App Store.
+    /// See, https://developer.apple.com/documentation/appstorereceipts/responsebody?language=objc
     /// </summary>
     public class AppleResponse
     {
         /// <summary>
-        /// Either 0 if the receipt is valid, or an error code
+        /// The environment for which the receipt was generated.
+        /// Possible values: Sandbox, Production
         /// </summary>
-        public int Status { get; set; }
-
         public string Environment { get; set; }
-        
-        /// <summary>
-        /// A JSON representation of the receipt that was sent for verification.
-        /// </summary>
-        public AppleReceipt Receipt { get; set; }
 
         /// <summary>
-        /// Only returned for receipts containing auto-renewable subscriptions. Base-64 encoded receipt for the most recent renewal.
+        /// An indicator that an error occurred during the request. A value of 1 indicates a temporary issue; retry validation for this receipt at a later time.
+        /// A value of 0 indicates an unresolvable issue; do not retry validation for this receipt. Only applicable to status codes 21100-21199.
+        /// </summary>
+        [JsonProperty("is-retryable")]
+        public bool IsRetryable { get; set; }
+
+        /// <summary>
+        /// The latest Base64 encoded app receipt. Only returned for receipts that contain auto-renewable subscriptions. 
         /// </summary>        
         public string LatestReceipt { get; set; }
 
         /// <summary>
-        /// Only returned for receipts containing auto-renewable subscriptions.
+        /// An array that contains all in-app purchase transactions. This excludes transactions for consumable products that have been marked as finished by your app. Only returned for receipts that contain auto-renewable subscriptions.
         /// </summary>
-        public List<ApplePurchase> LatestReceiptInfo { get; set; }
+        public List<AppleLatestReceiptInfo> LatestReceiptInfo { get; set; }
+
+        /// <summary>
+        /// An array where each element contains the pending renewal information for each auto-renewable subscription identified by the <em>product_id</em>. Only returned for app receipts that contain auto-renewable subscriptions.
+        /// </summary>
+        public List<ApplePendingRenewalInfo> PendingRenewalInfo { get; set; }
+
+        /// <summary>
+        /// A representation of the receipt that was sent for verification. 
+        /// </summary>
+        public AppleReceipt Receipt { get; set; }
+
+        /// <summary>
+        /// Either 0 if the receipt is valid, or a status code if there is an error. The status code reflects the status of the app receipt as a whole.
+        /// See, https://developer.apple.com/documentation/appstorereceipts/status?language=objc
+        /// </summary>
+        public int Status { get; set; }
 
         public bool IsValid => Status == 0;
         public bool WrongEnvironment => Status == 21007 || Status == 21008;
