@@ -13,7 +13,7 @@ namespace Iap.Verify.Tables.Entities
         {
             if (string.IsNullOrEmpty(receipt?.ProductId))
                 throw new ArgumentOutOfRangeException(nameof(receipt.ProductId));
-            if (validationResult == null)
+            if (validationResult is null)
                 throw new ArgumentNullException(nameof(validationResult));
 
             PartitionKey = receipt.ProductId;
