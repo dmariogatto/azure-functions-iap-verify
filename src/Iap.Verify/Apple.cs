@@ -46,7 +46,7 @@ namespace Iap.Verify
                 }
             };
 
-            int.TryParse(_configuration[Startup.GraceDaysKey], out _graceDays);
+            _ = int.TryParse(_configuration[Startup.GraceDaysKey], out _graceDays);
         }
 
         [FunctionName(nameof(Apple))]
@@ -133,6 +133,7 @@ namespace Iap.Verify
                     using var reader = new StreamReader(stream);
                     using var jsonReader = new JsonTextReader(reader);
 
+                    // Expects an iOS 7 style receipt
                     appleResponse = _serializer.Deserialize<AppleResponse>(jsonReader);
                 }
                 catch (Exception ex)

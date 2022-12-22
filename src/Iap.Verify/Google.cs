@@ -18,7 +18,7 @@ namespace Iap.Verify
     public class Google
     {
         // https://developers.google.com/android-publisher/api-ref/rest
-        private static AndroidPublisherService _googleService;
+        private readonly AndroidPublisherService _googleService;
 
         private readonly IVerificationRepository _verificationRepository;
         private readonly int _graceDays;
@@ -31,7 +31,7 @@ namespace Iap.Verify
             _googleService = googleService;
             _verificationRepository = verificationRepository;
 
-            int.TryParse(configuration[Startup.GraceDaysKey], out _graceDays);
+            _ = int.TryParse(configuration[Startup.GraceDaysKey], out _graceDays);
         }
 
         [FunctionName(nameof(Google))]
