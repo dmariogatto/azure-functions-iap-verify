@@ -47,7 +47,7 @@ namespace Iap.Verify
             {
                 var iapTask = GetInAppProductAsync(receipt.BundleId, receipt.ProductId, cancellationToken);
                 var subTask = GetSubscriptionAsync(receipt.BundleId, receipt.ProductId, cancellationToken);
-                
+
                 if (await iapTask is not null)
                 {
                     // Support legacy subscriptions
