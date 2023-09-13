@@ -1,8 +1,27 @@
 {
+  "version": "2.0",
   "extensions": {
     "http": {
       "routePrefix": "api/v1"
     }
   },
-  "version": "2.0"
+  "logging": {
+    "applicationInsights": {
+      "samplingSettings": {
+        "isEnabled": true,
+        "initialSamplingPercentage": 0.0,
+        "minSamplingPercentage": 0.0,
+        "maxSamplingPercentage": 0.0,
+        "excludedTypes": "Event;Exception"
+      },
+      "enableLiveMetrics": false,
+      "enableDependencyTracking": false,
+      "enablePerformanceCountersCollection": false,
+      "httpAutoCollectionOptions": {
+        "enableHttpTriggerExtendedInfoCollection": false,
+        "enableW3CDistributedTracing": false,
+        "enableResponseHeaderInjection": false
+      }
+    }
+  }
 }
