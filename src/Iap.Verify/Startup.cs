@@ -6,6 +6,9 @@ using Iap.Verify.Tables;
 using Microsoft.Azure.Functions.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using System;
+using System.Text;
 
 [assembly: FunctionsStartup(typeof(Iap.Verify.Startup))]
 
@@ -28,12 +31,15 @@ namespace Iap.Verify
 
             builder.Services.AddSingleton(serviceProvider =>
             {
-                var config = serviceProvider.GetService<IConfiguration>();
+                var googleOptions = serviceProvider.GetService<IOptions<GoogleOptions>>().Value;
+                var base64EncodedBytes = Convert.FromBase64String(googleOptions.KeyBase64);
+                var key = Encoding.UTF8.GetString(base64EncodedBytes);
+
                 return new ServiceAccountCredential(
-                    new ServiceAccountCredential.Initializer(config["GoogleAccount"])
+                    new ServiceAccountCredential.Initializer(googleOptions.Account)
                     {
                         Scopes = new[] { AndroidPublisherService.Scope.Androidpublisher }
-                    }.FromPrivateKey(config["GoogleKey"].Replace("\\n", "\n"))
+                    }.FromPrivateKey(key)
                 );
             });
 
@@ -47,6 +53,13 @@ namespace Iap.Verify
                     }
                 );
             });
+
+            builder.Services.AddOptions<AppleSecretOptions>()
+                .Configure(builder.GetContext().Configuration.GetSection(AppleSecretOptions.AppleSecretStoreKey).Bind);
+            builder.Services.AddOptions<AppleStoreOptions>()
+                .Configure(builder.GetContext().Configuration.GetSection(AppleStoreOptions.AppleStoreKey).Bind);
+            builder.Services.AddOptions<GoogleOptions>()
+                .Configure(builder.GetContext().Configuration.GetSection(GoogleOptions.GoogleKey).Bind);
 
             builder.Services.AddHttpClient();
             builder.Services.AddLogging();

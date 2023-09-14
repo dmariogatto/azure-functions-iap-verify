@@ -36,7 +36,7 @@ namespace Iap.Verify
 
         [FunctionName(nameof(Google))]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] Receipt receipt,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = $"v1/{nameof(Google)}")] Receipt receipt,
             HttpRequest req,
             ILogger log,
             CancellationToken cancellationToken)

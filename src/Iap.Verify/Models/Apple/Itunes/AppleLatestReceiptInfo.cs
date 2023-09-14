@@ -49,7 +49,7 @@ namespace Iap.Verify.Models
 
         /// <summary>
         /// A value that indicates whether the user is the purchaser of the product or is a family member with access to the product through Family Sharing.
-        /// 
+        ///
         /// Possible values,
         /// <strong>FAMILY_SHARED</strong>: The transaction belongs to a family member who benefits from service.
         /// <strong>PURCHASED</strong>: The transaction belongs to the purchaser.
@@ -58,7 +58,7 @@ namespace Iap.Verify.Models
 
         /// <summary>
         /// An indicator of whether an auto-renewable subscription is in the introductory price period.
-        /// 
+        ///
         /// Possible values,
         /// <strong>true</strong>: The customer’s subscription is in an introductory price period
         /// <strong>false</strong>: The subscription is not in an introductory price period.
@@ -67,7 +67,7 @@ namespace Iap.Verify.Models
 
         /// <summary>
         /// An indicator of whether an auto-renewable subscription is in the free trial period.
-        /// 
+        ///
         /// Possible values,
         /// <strong>true</strong>: The subscription is in the free trial period.
         /// <strong>false</strong>: The subscription is not in the free trial period.
@@ -76,7 +76,7 @@ namespace Iap.Verify.Models
 
         /// <summary>
         /// An indicator that a subscription has been canceled due to an upgrade. This field is only present for upgrade transactions.
-        /// 
+        ///
         /// Possible values,
         /// <strong>true</strong>
         /// </summary>
