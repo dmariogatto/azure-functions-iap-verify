@@ -3,9 +3,12 @@
   "Values": {
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "GraceDays": "3",
-    "GoogleAccount": "",
-    "GoogleKey": "",
-    "AppleSecret.{BundleId}": "",
-    "AppleSecret": ""
+    "Google:Account": "",
+    "Google:KeyBase64": "",
+    "AppleSecret:Master": "",
+    "AppleSecret:AppSpecific": "",
+    "AppleStore:IssuerId": "",
+    "AppleStore:KeyId": "",
+    "AppleStore:PrivateKeyBase64": ""
   }
 }

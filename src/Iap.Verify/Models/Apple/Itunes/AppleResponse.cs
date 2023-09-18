@@ -23,8 +23,8 @@ namespace Iap.Verify.Models
         public bool IsRetryable { get; set; }
 
         /// <summary>
-        /// The latest Base64 encoded app receipt. Only returned for receipts that contain auto-renewable subscriptions. 
-        /// </summary>        
+        /// The latest Base64 encoded app receipt. Only returned for receipts that contain auto-renewable subscriptions.
+        /// </summary>
         public string LatestReceipt { get; set; }
 
         /// <summary>
@@ -38,7 +38,7 @@ namespace Iap.Verify.Models
         public List<ApplePendingRenewalInfo> PendingRenewalInfo { get; set; }
 
         /// <summary>
-        /// A representation of the receipt that was sent for verification. 
+        /// A representation of the receipt that was sent for verification.
         /// </summary>
         public AppleReceipt Receipt { get; set; }
 

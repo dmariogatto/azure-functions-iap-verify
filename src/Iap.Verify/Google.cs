@@ -36,7 +36,7 @@ namespace Iap.Verify
 
         [FunctionName(nameof(Google))]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] Receipt receipt,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = $"v1/{nameof(Google)}")] Receipt receipt,
             HttpRequest req,
             ILogger log,
             CancellationToken cancellationToken)
@@ -47,7 +47,7 @@ namespace Iap.Verify
             {
                 var iapTask = GetInAppProductAsync(receipt.BundleId, receipt.ProductId, cancellationToken);
                 var subTask = GetSubscriptionAsync(receipt.BundleId, receipt.ProductId, cancellationToken);
-                
+
                 if (await iapTask is not null)
                 {
                     // Support legacy subscriptions
@@ -166,13 +166,14 @@ namespace Iap.Verify
                 {
                     var utcNow = DateTime.UtcNow;
 
-                    var startTimeUtc = purchase.StartTime as DateTime? ?? DateTime.UnixEpoch;
+                    var startTimeUtc = (purchase.StartTimeDateTimeOffset ?? DateTimeOffset.UnixEpoch).UtcDateTime;
                     // If the order has been cancelled, then expiry time will set to the cancel date
                     var expiryTimeUtc = purchase.LineItems
-                        ?.Select(i => i.ExpiryTime as DateTime?)
+                        ?.Select(i => i.ExpiryTimeDateTimeOffset)
                         ?.Where(i => i.HasValue)
                         ?.OrderByDescending(i => i)
-                        ?.FirstOrDefault();
+                        ?.FirstOrDefault()
+                        ?.UtcDateTime;
 
                     var suspended = false;
                     var graceDays = _graceDays;
