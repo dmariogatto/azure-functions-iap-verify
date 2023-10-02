@@ -6,6 +6,6 @@ namespace Iap.Verify.Tables
 {
     public interface IVerificationRepository
     {
-        Task<bool> SaveLogAsync(string tableName, Receipt receipt, ValidationResult validationResult, CancellationToken cancellationToken);
+        Task<bool> SaveLogAsync(string tableName, string validatorName, Receipt receipt, ValidationResult validationResult, CancellationToken cancellationToken);
     }
 }

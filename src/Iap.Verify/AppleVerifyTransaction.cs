@@ -29,6 +29,7 @@ namespace Iap.Verify
     {
         private const string AppleProductionUrl = "https://api.storekit.itunes.apple.com/inApps/v1/transactions/{0}";
         private const string AppleTestUrl = "https://api.storekit-sandbox.itunes.apple.com/inApps/v1/transactions/{0}";
+        private const string ValidatorRoute = "v2/Apple";
 
         private readonly static IMemoryCache Cache = new MemoryCache(new MemoryCacheOptions());
 
@@ -36,6 +37,7 @@ namespace Iap.Verify
 
         private readonly HttpClient _httpClient;
         private readonly JsonSerializer _serializer;
+        private readonly JwtSecurityTokenHandler _jwtHandler;
         private readonly int _graceDays;
 
         public AppleVerifyTransaction(
@@ -49,13 +51,14 @@ namespace Iap.Verify
             _httpClient = httpClientFactory.CreateClient();
 
             _serializer = new JsonSerializer();
+            _jwtHandler = new JwtSecurityTokenHandler();
 
             _ = int.TryParse(configuration[Startup.GraceDaysKey], out _graceDays);
         }
 
         [FunctionName(nameof(AppleVerifyTransaction))]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v2/Apple")] Receipt receipt,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = ValidatorRoute)] Receipt receipt,
             HttpRequest req,
             ILogger log,
             CancellationToken cancellationToken)
@@ -77,8 +80,7 @@ namespace Iap.Verify
 
                 if (!string.IsNullOrEmpty(storeKitResponse?.SignedTransactionInfo))
                 {
-                    var handler = new JwtSecurityTokenHandler();
-                    var token = handler.ReadJwtToken(storeKitResponse.SignedTransactionInfo);
+                    var token = _jwtHandler.ReadJwtToken(storeKitResponse.SignedTransactionInfo);
                     var payload = Base64UrlEncoder.Decode(token.EncodedPayload);
                     var transactionInfo = JsonConvert.DeserializeObject<StoreKitTransactionInfo>(payload);
                     result = ValidateTransaction(receipt, transactionInfo, log);
@@ -93,7 +95,7 @@ namespace Iap.Verify
                 result = new ValidationResult(false, $"Invalid {nameof(Receipt)}");
             }
 
-            return await LogVerificationResultAsync(receipt, result, log, cancellationToken)
+            return await LogVerificationResultAsync(ValidatorRoute, receipt, result, log, cancellationToken)
                 ? new JsonResult(result.ValidatedReceipt)
                 : new BadRequestResult();
         }
@@ -110,7 +112,7 @@ namespace Iap.Verify
                 using var response = await _httpClient.SendAsync(request, cancellationToken);
                 response.EnsureSuccessStatusCode();
 
-                using var stream = await response.Content.ReadAsStreamAsync();
+                using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
                 using var reader = new StreamReader(stream);
                 using var jsonReader = new JsonTextReader(reader);
 
@@ -130,7 +132,7 @@ namespace Iap.Verify
 
             try
             {
-                receipt.Environment = string.Equals(transactionInfo.Environment, "Production", StringComparison.OrdinalIgnoreCase)
+                receipt.Environment = string.Equals(transactionInfo.Environment, Production, StringComparison.OrdinalIgnoreCase)
                     ? EnvironmentType.Production
                     : EnvironmentType.Test;
 
@@ -220,7 +222,7 @@ namespace Iap.Verify
                 expires: issuedAt.AddMinutes(20),
                 signingCredentials: cred);
 
-            var jwt = new JwtSecurityTokenHandler().WriteToken(token);
+            var jwt = _jwtHandler.WriteToken(token);
             return jwt;
         }
 

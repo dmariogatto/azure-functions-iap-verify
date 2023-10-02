@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace Iap.Verify.Models
+﻿namespace Iap.Verify.Models
 {
     public class ValidationResult
     {

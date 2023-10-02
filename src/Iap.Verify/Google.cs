@@ -17,6 +17,8 @@ namespace Iap.Verify
 {
     public class Google
     {
+        private const string ValidatorRoute = "v1/Google";
+
         // https://developers.google.com/android-publisher/api-ref/rest
         private readonly AndroidPublisherService _googleService;
 
@@ -36,7 +38,7 @@ namespace Iap.Verify
 
         [FunctionName(nameof(Google))]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = $"v1/{nameof(Google)}")] Receipt receipt,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = ValidatorRoute)] Receipt receipt,
             HttpRequest req,
             ILogger log,
             CancellationToken cancellationToken)
@@ -69,7 +71,7 @@ namespace Iap.Verify
                 result = new ValidationResult(false, $"Invalid {nameof(Receipt)}");
             }
 
-            await _verificationRepository.SaveLogAsync(nameof(Google), receipt, result, cancellationToken);
+            await _verificationRepository.SaveLogAsync(nameof(Google), ValidatorRoute, receipt, result, cancellationToken);
 
             if (result.IsValid && result.ValidatedReceipt is not null)
             {

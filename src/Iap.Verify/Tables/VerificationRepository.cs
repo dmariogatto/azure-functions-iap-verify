@@ -24,7 +24,7 @@ namespace Iap.Verify.Tables
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public async Task<bool> SaveLogAsync(string tableName, Receipt receipt, ValidationResult validationResult, CancellationToken cancellationToken)
+        public async Task<bool> SaveLogAsync(string tableName, string validatorName, Receipt receipt, ValidationResult validationResult, CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(tableName))
                 throw new ArgumentNullException(nameof(tableName));
@@ -34,7 +34,7 @@ namespace Iap.Verify.Tables
             try
             {
                 var tableClient = new TableClient(_connectionString, tableName) ?? throw new NullReferenceException($"Reference to table '{tableName}' cannot be null!");
-                var entity = new Verification(receipt, validationResult);
+                var entity = new Verification(receipt, validationResult, validatorName);
                 await tableClient.CreateIfNotExistsAsync(cancellationToken).ConfigureAwait(false);
                 var resp = await tableClient.AddEntityAsync(entity, cancellationToken).ConfigureAwait(false);
                 success = resp.Status >= 200 && resp.Status <= 299;
