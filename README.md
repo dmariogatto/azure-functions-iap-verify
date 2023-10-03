@@ -21,7 +21,7 @@ Uses the [Google Android Publisher](https://www.nuget.org/packages/Google.Apis.A
 | Google:Account              | STRING                   | Google Service Account User                                                                                                           |
 | Google:KeyBase64            | B64_STRING               | Base64 encoded P8 key for service account                                                                                             |
 | AppleSecret:Master          | STRING                   | Master secret for `verifyReceipt` endpoint, fall back when no app specific secret found                                               |
-| AppleSecret:AppSpecific     | {BUNDLE_ID}:{SECRET},... | App specific secrets for `verifyReceipt` endpoint  Comma separated dictionary, key (BundleId) and value (secret) separated by a colon |
+| AppleSecret:AppSpecific     | {BUNDLE_ID}:{SECRET},... | App specific secrets for `verifyReceipt` endpoint  Comma separated dictionary, key (BundleId) and value (secret) separated by a Colon |
 | AppleStore:IssuerId         | GUID                     | JWT Issuer ID for StoreKit Server API                                                                                                 |
 | AppleStore:KeyId            | STRING                   | JWT Key ID for StoreKit Server API                                                                                                    |
 | AppleStore:PrivateKeyBase64 | B64_STRING               | Base64 encoded P8 key for signing JWT for StoreKit API                                                                                |
