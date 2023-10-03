@@ -1,6 +1,4 @@
-﻿using Newtonsoft.Json;
-
-namespace Iap.Verify.Models
+﻿namespace Iap.Verify.Models
 {
     public enum EnvironmentType
     {

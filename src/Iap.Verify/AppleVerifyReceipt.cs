@@ -22,6 +22,7 @@ namespace Iap.Verify
     {
         private const string AppleProductionUrl = "https://buy.itunes.apple.com/verifyReceipt";
         private const string AppleTestUrl = "https://sandbox.itunes.apple.com/verifyReceipt";
+        private const string ValidatorRoute = "v1/Apple";
 
         private readonly AppleSecretOptions _secretOptions;
 
@@ -52,7 +53,7 @@ namespace Iap.Verify
 
         [FunctionName(nameof(AppleVerifyReceipt))]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/Apple")] Receipt receipt,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = ValidatorRoute)] Receipt receipt,
             HttpRequest req,
             ILogger log,
             CancellationToken cancellationToken)
@@ -87,7 +88,7 @@ namespace Iap.Verify
                 result = new ValidationResult(false, $"Invalid {nameof(Receipt)}");
             }
 
-            return await LogVerificationResultAsync(receipt, result, log, cancellationToken)
+            return await LogVerificationResultAsync(ValidatorRoute, receipt, result, log, cancellationToken)
                 ? new JsonResult(result.ValidatedReceipt)
                 : new BadRequestResult();
         }
@@ -114,7 +115,7 @@ namespace Iap.Verify
                     using var response = await _httpClient.PostAsync(url, postBody, cancellationToken);
                     response.EnsureSuccessStatusCode();
 
-                    using var stream = await response.Content.ReadAsStreamAsync();
+                    using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
                     using var reader = new StreamReader(stream);
                     using var jsonReader = new JsonTextReader(reader);
 
@@ -136,7 +137,7 @@ namespace Iap.Verify
 
             try
             {
-                receipt.Environment = string.Equals(appleResponse.Environment, "Production", StringComparison.OrdinalIgnoreCase)
+                receipt.Environment = string.Equals(appleResponse.Environment, Production, StringComparison.OrdinalIgnoreCase)
                     ? EnvironmentType.Production
                     : EnvironmentType.Test;
 

@@ -8,6 +8,8 @@ namespace Iap.Verify
 {
     public abstract class Apple
     {
+        protected const string Production = nameof(Production);
+
         private readonly IVerificationRepository _verificationRepository;
 
         public Apple(
@@ -16,9 +18,9 @@ namespace Iap.Verify
             _verificationRepository = verificationRepository;
         }
 
-        protected async Task<bool> LogVerificationResultAsync(Receipt receipt, ValidationResult result, ILogger log, CancellationToken cancellationToken)
+        protected async Task<bool> LogVerificationResultAsync(string validatorName, Receipt receipt, ValidationResult result, ILogger log, CancellationToken cancellationToken)
         {
-            await _verificationRepository.SaveLogAsync(nameof(Apple), receipt, result, cancellationToken);
+            await _verificationRepository.SaveLogAsync(nameof(Apple), validatorName, receipt, result, cancellationToken);
 
             if (result.IsValid && result.ValidatedReceipt is not null)
             {
