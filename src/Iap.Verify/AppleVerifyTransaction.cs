@@ -120,7 +120,7 @@ namespace Iap.Verify
             }
             catch (Exception ex)
             {
-                log.LogError($"Failed to parse {nameof(StoreKitTransactionResponse)}: {ex.Message}", ex);
+                log.LogError(ex, "Failed to parse StoreKitTransactionResponse: {Message}", ex.Message);
             }
 
             return storeKitResponse;
@@ -190,7 +190,7 @@ namespace Iap.Verify
             }
             catch (Exception ex)
             {
-                log.LogError($"Failed to validate transaction: {ex.Message}", ex);
+                log.LogError(ex, "Failed to validate transaction: {Message}", ex.Message);
                 result = new ValidationResult(false, ex.Message);
             }
 

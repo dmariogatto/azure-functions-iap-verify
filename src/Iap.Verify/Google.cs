@@ -75,18 +75,18 @@ namespace Iap.Verify
 
             if (result.IsValid && result.ValidatedReceipt is not null)
             {
-                log.LogInformation($"Validated IAP '{receipt.BundleId}':'{receipt.ProductId}'");
+                log.LogInformation("Validated IAP '{BundleId}':'{ProductId}'", receipt.BundleId, receipt.ProductId);
                 return new JsonResult(result.ValidatedReceipt);
             }
 
             if (!string.IsNullOrEmpty(receipt?.BundleId) &&
                 !string.IsNullOrEmpty(receipt?.ProductId))
             {
-                log.LogInformation($"Failed to validate IAP '{receipt.BundleId}':'{receipt.ProductId}', reason '{result?.Message ?? string.Empty}'");
+                log.LogInformation("Failed to validate IAP '{BundleId}':'{ProductId}', reason '{Message}'", receipt.BundleId, receipt.ProductId, result?.Message ?? string.Empty);
             }
             else
             {
-                log.LogInformation($"Failed to validate IAP, reason '{result?.Message ?? string.Empty}'");
+                log.LogInformation("Failed to validate IAP, reason '{Message}'", result?.Message ?? string.Empty);
             }
 
             return new BadRequestResult();
@@ -136,7 +136,7 @@ namespace Iap.Verify
             }
             catch (Exception ex)
             {
-                log.LogError("Failed to validate product", ex);
+                log.LogError(ex, "Failed to validate product: {Message}", ex.Message);
                 result = new ValidationResult(false, ex.Message);
             }
 
@@ -217,7 +217,7 @@ namespace Iap.Verify
             }
             catch (Exception ex)
             {
-                log.LogError($"Failed to validate subscription: {ex.Message}", ex);
+                log.LogError(ex, "Failed to validate subscription: {Message}", ex.Message);
                 result = new ValidationResult(false, ex.Message);
             }
 

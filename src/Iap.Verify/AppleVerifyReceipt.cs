@@ -124,7 +124,7 @@ namespace Iap.Verify
                 }
                 catch (Exception ex)
                 {
-                    log.LogError($"Failed to parse {nameof(AppleResponse)}: {ex.Message}", ex);
+                    log.LogError(ex, "Failed to parse AppleResponse: {Message}", ex.Message);
                 }
             }
 
@@ -206,7 +206,7 @@ namespace Iap.Verify
             }
             catch (Exception ex)
             {
-                log.LogError($"Failed to validate product: {ex.Message}", ex);
+                log.LogError(ex, "Failed to validate product: {Message}", ex.Message);
                 result = new ValidationResult(false, ex.Message);
             }
 

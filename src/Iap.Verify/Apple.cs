@@ -24,18 +24,18 @@ namespace Iap.Verify
 
             if (result.IsValid && result.ValidatedReceipt is not null)
             {
-                log.LogInformation($"Validated IAP '{receipt.BundleId}':'{receipt.ProductId}'");
+                log.LogInformation("Validated IAP '{BundleId}':'{ProductId}'", receipt.BundleId, receipt.ProductId);
                 return true;
             }
 
             if (!string.IsNullOrEmpty(receipt?.BundleId) &&
                 !string.IsNullOrEmpty(receipt?.ProductId))
             {
-                log.LogInformation($"Failed to validate IAP '{receipt.BundleId}':'{receipt.ProductId}', reason '{result?.Message ?? string.Empty}'");
+                log.LogInformation("Failed to validate IAP '{BundleId}':'{ProductId}', reason '{Message}'", receipt.BundleId, receipt.ProductId, result?.Message ?? string.Empty);
             }
             else
             {
-                log.LogInformation($"Failed to validate IAP, reason '{result?.Message ?? string.Empty}'");
+                log.LogInformation("Failed to validate IAP, reason '{Message}'", result?.Message ?? string.Empty);
             }
 
             return false;
