@@ -144,6 +144,10 @@ namespace Iap.Verify
                 {
                     result = new ValidationResult(false, $"bundle id '{receipt.BundleId}' does not match '{transactionInfo.BundleId}'");
                 }
+                else if (!string.Equals(transactionInfo.ProductId, receipt.ProductId, StringComparison.Ordinal))
+                {
+                    result = new ValidationResult(false, $"product id '{receipt.ProductId}' does not match '{transactionInfo.ProductId}'");
+                }
                 else
                 {
                     var utcNow = DateTime.UtcNow;

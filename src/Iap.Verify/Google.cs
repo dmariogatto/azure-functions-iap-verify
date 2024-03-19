@@ -164,6 +164,10 @@ namespace Iap.Verify
                 {
                     result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.LatestOrderId}'");
                 }
+                else if (purchase.LineItems.Any(i => i.ProductId.StartsWith(receipt.ProductId, StringComparison.Ordinal)) == false)
+                {
+                    result = new ValidationResult(false, $"product id '{receipt.ProductId}' does not match the one in the purchase");
+                }
                 else
                 {
                     var utcNow = DateTime.UtcNow;
