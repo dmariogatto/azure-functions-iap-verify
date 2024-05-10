@@ -1,14 +1,13 @@
 using Iap.Verify.Models;
 using Iap.Verify.Tables;
 using Microsoft.Extensions.Logging;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Iap.Verify
 {
     public abstract class Apple
     {
         protected const string Production = nameof(Production);
+        protected const string GraceDays = nameof(GraceDays);
 
         private readonly IVerificationRepository _verificationRepository;
 

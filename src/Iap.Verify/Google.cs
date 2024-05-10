@@ -4,43 +4,45 @@ using Iap.Verify.Models;
 using Iap.Verify.Tables;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using FromBodyAttribute = Microsoft.Azure.Functions.Worker.Http.FromBodyAttribute;
 
 namespace Iap.Verify
 {
     public class Google
     {
         private const string ValidatorRoute = "v1/Google";
+        private const string GraceDays = nameof(GraceDays);
 
         // https://developers.google.com/android-publisher/api-ref/rest
         private readonly AndroidPublisherService _googleService;
 
         private readonly IVerificationRepository _verificationRepository;
+
+        private readonly ILogger _logger;
+
         private readonly int _graceDays;
 
         public Google(
             AndroidPublisherService googleService,
             IVerificationRepository verificationRepository,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            ILoggerFactory loggerFactory)
         {
             _googleService = googleService;
             _verificationRepository = verificationRepository;
 
-            _ = int.TryParse(configuration[Startup.GraceDaysKey], out _graceDays);
+            _logger = loggerFactory.CreateLogger<Google>();
+
+            _ = int.TryParse(configuration[GraceDays], out _graceDays);
         }
 
-        [FunctionName(nameof(Google))]
+        [Function(nameof(Google))]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = ValidatorRoute)] Receipt receipt,
-            HttpRequest req,
-            ILogger log,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = ValidatorRoute)] HttpRequest req,
+            [FromBody] Receipt receipt,
             CancellationToken cancellationToken)
         {
             var result = default(ValidationResult);
@@ -54,12 +56,12 @@ namespace Iap.Verify
                 {
                     // Support legacy subscriptions
                     result = string.Equals(iapTask.Result.PurchaseType, "subscription", StringComparison.OrdinalIgnoreCase)
-                        ? await ValidateSubscriptionAsync(receipt, log, cancellationToken)
-                        : await ValidateProductAsync(receipt, log, cancellationToken);
+                        ? await ValidateSubscriptionAsync(receipt, _logger, cancellationToken)
+                        : await ValidateProductAsync(receipt, _logger, cancellationToken);
                 }
                 else if (await subTask is not null)
                 {
-                    result = await ValidateSubscriptionAsync(receipt, log, cancellationToken);
+                    result = await ValidateSubscriptionAsync(receipt, _logger, cancellationToken);
                 }
                 else
                 {
@@ -75,18 +77,18 @@ namespace Iap.Verify
 
             if (result.IsValid && result.ValidatedReceipt is not null)
             {
-                log.LogInformation("Validated IAP '{BundleId}':'{ProductId}'", receipt.BundleId, receipt.ProductId);
+                _logger.LogInformation("Validated IAP '{BundleId}':'{ProductId}'", receipt.BundleId, receipt.ProductId);
                 return new JsonResult(result.ValidatedReceipt);
             }
 
             if (!string.IsNullOrEmpty(receipt?.BundleId) &&
                 !string.IsNullOrEmpty(receipt?.ProductId))
             {
-                log.LogInformation("Failed to validate IAP '{BundleId}':'{ProductId}', reason '{Message}'", receipt.BundleId, receipt.ProductId, result?.Message ?? string.Empty);
+                _logger.LogInformation("Failed to validate IAP '{BundleId}':'{ProductId}', reason '{Message}'", receipt.BundleId, receipt.ProductId, result?.Message ?? string.Empty);
             }
             else
             {
-                log.LogInformation("Failed to validate IAP, reason '{Message}'", result?.Message ?? string.Empty);
+                _logger.LogInformation("Failed to validate IAP, reason '{Message}'", result?.Message ?? string.Empty);
             }
 
             return new BadRequestResult();

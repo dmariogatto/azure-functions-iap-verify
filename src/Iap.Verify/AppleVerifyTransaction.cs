@@ -3,25 +3,19 @@ using Iap.Verify.Models;
 using Iap.Verify.Tables;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
-using System.IO;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Text.Json;
+using FromBodyAttribute = Microsoft.Azure.Functions.Worker.Http.FromBodyAttribute;
 
 namespace Iap.Verify
 {
@@ -33,10 +27,12 @@ namespace Iap.Verify
 
         private readonly static IMemoryCache Cache = new MemoryCache(new MemoryCacheOptions());
 
+        private readonly ILogger _logger;
+
         private readonly AppleStoreOptions _storeKeyOptions;
 
         private readonly HttpClient _httpClient;
-        private readonly JsonSerializer _serializer;
+        private readonly JsonSerializerOptions _jsonSerializerOptions;
         private readonly JwtSecurityTokenHandler _jwtHandler;
         private readonly int _graceDays;
 
@@ -44,23 +40,29 @@ namespace Iap.Verify
             IOptions<AppleStoreOptions> storeKeyOptions,
             IHttpClientFactory httpClientFactory,
             IConfiguration configuration,
-            IVerificationRepository verificationRepository) : base(verificationRepository)
+            IVerificationRepository verificationRepository,
+            ILoggerFactory loggerFactory) : base(verificationRepository)
         {
+            _logger = loggerFactory.CreateLogger<AppleVerifyTransaction>();
+
             _storeKeyOptions = storeKeyOptions.Value;
 
             _httpClient = httpClientFactory.CreateClient();
 
-            _serializer = new JsonSerializer();
+            _jsonSerializerOptions = new JsonSerializerOptions(new JsonSerializerOptions()
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            });
+
             _jwtHandler = new JwtSecurityTokenHandler();
 
-            _ = int.TryParse(configuration[Startup.GraceDaysKey], out _graceDays);
+            _ = int.TryParse(configuration[GraceDays], out _graceDays);
         }
 
-        [FunctionName(nameof(AppleVerifyTransaction))]
+        [Function(nameof(AppleVerifyTransaction))]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = ValidatorRoute)] Receipt receipt,
-            HttpRequest req,
-            ILogger log,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = ValidatorRoute)] HttpRequest req,
+            [FromBody] Receipt receipt,
             CancellationToken cancellationToken)
         {
             var result = default(ValidationResult);
@@ -70,20 +72,20 @@ namespace Iap.Verify
                 var url = string.Format(AppleProductionUrl, receipt.TransactionId);
                 var jwt = GetCachedAppStoreJwt(receipt.BundleId);
 
-                var storeKitResponse = await GetTransactionAsync(url, jwt, log, cancellationToken);
+                var storeKitResponse = await GetTransactionAsync(url, jwt, _logger, cancellationToken);
                 if (string.IsNullOrEmpty(storeKitResponse?.SignedTransactionInfo))
                 {
-                    log.LogInformation("Attempting sandbox purchase, calling test environment...");
+                    _logger.LogInformation("Attempting sandbox purchase, calling test environment...");
                     url = string.Format(AppleTestUrl, receipt.TransactionId);
-                    storeKitResponse = await GetTransactionAsync(url, jwt, log, cancellationToken);
+                    storeKitResponse = await GetTransactionAsync(url, jwt, _logger, cancellationToken);
                 }
 
                 if (!string.IsNullOrEmpty(storeKitResponse?.SignedTransactionInfo))
                 {
                     var token = _jwtHandler.ReadJwtToken(storeKitResponse.SignedTransactionInfo);
                     var payload = Base64UrlEncoder.Decode(token.EncodedPayload);
-                    var transactionInfo = JsonConvert.DeserializeObject<StoreKitTransactionInfo>(payload);
-                    result = ValidateTransaction(receipt, transactionInfo, log);
+                    var transactionInfo = JsonSerializer.Deserialize<StoreKitTransactionInfo>(payload, options: _jsonSerializerOptions);
+                    result = ValidateTransaction(receipt, transactionInfo, _logger);
                 }
                 else
                 {
@@ -95,7 +97,7 @@ namespace Iap.Verify
                 result = new ValidationResult(false, $"Invalid {nameof(Receipt)}");
             }
 
-            return await LogVerificationResultAsync(ValidatorRoute, receipt, result, log, cancellationToken)
+            return await LogVerificationResultAsync(ValidatorRoute, receipt, result, _logger, cancellationToken)
                 ? new JsonResult(result.ValidatedReceipt)
                 : new BadRequestResult();
         }
@@ -113,10 +115,8 @@ namespace Iap.Verify
                 response.EnsureSuccessStatusCode();
 
                 using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                using var reader = new StreamReader(stream);
-                using var jsonReader = new JsonTextReader(reader);
 
-                storeKitResponse = _serializer.Deserialize<StoreKitTransactionResponse>(jsonReader);
+                storeKitResponse = await JsonSerializer.DeserializeAsync<StoreKitTransactionResponse>(stream, options: _jsonSerializerOptions, cancellationToken: cancellationToken);
             }
             catch (Exception ex)
             {

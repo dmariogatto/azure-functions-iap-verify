@@ -1,13 +1,13 @@
-﻿using Newtonsoft.Json;
+﻿using System.Text.Json.Serialization;
 
 namespace Iap.Verify.Models
 {
     public class AppleRequest
     {
-        [JsonProperty("receipt-data")]
+        [JsonPropertyName("receipt-data")]
         public string ReceiptData { get; set; }
 
-        [JsonProperty("password")]
+        [JsonPropertyName("password")]
         public string Password { get; set; }
     }
 }

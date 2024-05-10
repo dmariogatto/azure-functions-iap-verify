@@ -2,19 +2,12 @@ using Iap.Verify.Models;
 using Iap.Verify.Tables;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
-using System;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Text.Json;
+using FromBodyAttribute = Microsoft.Azure.Functions.Worker.Http.FromBodyAttribute;
 
 namespace Iap.Verify
 {
@@ -24,55 +17,56 @@ namespace Iap.Verify
         private const string AppleTestUrl = "https://sandbox.itunes.apple.com/verifyReceipt";
         private const string ValidatorRoute = "v1/Apple";
 
+        private readonly ILogger _logger;
+
         private readonly AppleSecretOptions _secretOptions;
 
         private readonly HttpClient _httpClient;
-        private readonly JsonSerializer _serializer;
+        private readonly JsonSerializerOptions _jsonSerializerOptions;
         private readonly int _graceDays;
 
         public AppleVerifyReceipt(
             IOptions<AppleSecretOptions> secretOptions,
             IHttpClientFactory httpClientFactory,
             IConfiguration configuration,
-            IVerificationRepository verificationRepository) : base(verificationRepository)
+            IVerificationRepository verificationRepository,
+            ILoggerFactory loggerFactory) : base(verificationRepository)
         {
+            _logger = loggerFactory.CreateLogger<AppleVerifyReceipt>();
+
             _secretOptions = secretOptions.Value;
 
             _httpClient = httpClientFactory.CreateClient();
 
-            _serializer = new JsonSerializer()
+            _jsonSerializerOptions = new JsonSerializerOptions(new JsonSerializerOptions()
             {
-                ContractResolver = new DefaultContractResolver()
-                {
-                    NamingStrategy = new SnakeCaseNamingStrategy()
-                }
-            };
+                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            });
 
-            _ = int.TryParse(configuration[Startup.GraceDaysKey], out _graceDays);
+            _ = int.TryParse(configuration[GraceDays], out _graceDays);
         }
 
-        [FunctionName(nameof(AppleVerifyReceipt))]
+        [Function(nameof(AppleVerifyReceipt))]
         public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = ValidatorRoute)] Receipt receipt,
-            HttpRequest req,
-            ILogger log,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = ValidatorRoute)]  HttpRequest req,
+            [FromBody] Receipt receipt,
             CancellationToken cancellationToken)
         {
             var result = default(ValidationResult);
 
             if (receipt?.IsValid() == true)
             {
-                var appleResponse = await PostAppleReceiptAsync(AppleProductionUrl, receipt, log, cancellationToken);
+                var appleResponse = await PostAppleReceiptAsync(AppleProductionUrl, receipt, _logger, cancellationToken);
                 // Apple recommends calling production, then falling back to sandbox on an error code
                 if (appleResponse?.WrongEnvironment == true)
                 {
-                    log.LogInformation("Sandbox purchase, calling test environment...");
-                    appleResponse = await PostAppleReceiptAsync(AppleTestUrl, receipt, log, cancellationToken);
+                    _logger.LogInformation("Sandbox purchase, calling test environment...");
+                    appleResponse = await PostAppleReceiptAsync(AppleTestUrl, receipt, _logger, cancellationToken);
                 }
 
                 if (appleResponse?.IsValid == true)
                 {
-                    result = ValidateProduct(receipt, appleResponse, log);
+                    result = ValidateProduct(receipt, appleResponse, _logger);
                 }
                 else if (!string.IsNullOrEmpty(appleResponse?.Error))
                 {
@@ -88,7 +82,7 @@ namespace Iap.Verify
                 result = new ValidationResult(false, $"Invalid {nameof(Receipt)}");
             }
 
-            return await LogVerificationResultAsync(ValidatorRoute, receipt, result, log, cancellationToken)
+            return await LogVerificationResultAsync(ValidatorRoute, receipt, result, _logger, cancellationToken)
                 ? new JsonResult(result.ValidatedReceipt)
                 : new BadRequestResult();
         }
@@ -111,16 +105,13 @@ namespace Iap.Verify
                         Password = appSecret
                     };
 
-                    var postBody = new StringContent(JsonConvert.SerializeObject(request));
+                    var postBody = new StringContent(JsonSerializer.Serialize(request));
                     using var response = await _httpClient.PostAsync(url, postBody, cancellationToken);
                     response.EnsureSuccessStatusCode();
 
                     using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                    using var reader = new StreamReader(stream);
-                    using var jsonReader = new JsonTextReader(reader);
-
                     // Expects an iOS 7 style receipt
-                    appleResponse = _serializer.Deserialize<AppleResponse>(jsonReader);
+                    appleResponse = await JsonSerializer.DeserializeAsync<AppleResponse>(stream, options: _jsonSerializerOptions, cancellationToken: cancellationToken);
                 }
                 catch (Exception ex)
                 {

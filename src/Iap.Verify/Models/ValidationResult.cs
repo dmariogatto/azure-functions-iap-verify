@@ -1,6 +1,6 @@
 ﻿namespace Iap.Verify.Models
 {
-    public class ValidationResult
+    public record ValidationResult
     {
         public ValidationResult(bool isValid, string msg)
         {
@@ -14,9 +14,9 @@
             Message = string.Empty;
         }
 
-        public bool IsValid { get; set; }
-        public string Message { get; set; }
+        public bool IsValid { get; init; }
+        public string Message { get; init; }
 
-        public ValidatedReceipt ValidatedReceipt { get; set; }
+        public ValidatedReceipt ValidatedReceipt { get; init; }
     }
 }

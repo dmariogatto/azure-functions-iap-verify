@@ -1,6 +1,4 @@
 ﻿using Iap.Verify.Models;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Iap.Verify.Tables
 {
