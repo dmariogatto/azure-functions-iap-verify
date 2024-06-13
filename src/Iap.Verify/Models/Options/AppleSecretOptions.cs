@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-
-namespace Iap.Verify.Models
+﻿namespace Iap.Verify.Models
 {
     public class AppleSecretOptions
     {
