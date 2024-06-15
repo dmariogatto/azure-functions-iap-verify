@@ -44,7 +44,7 @@ namespace Iap.Verify.Models
 
         /// <summary>
         /// An indicator of whether an auto-renewable subscription is in the introductory price period.
-        /// 
+        ///
         /// Possible values,
         /// <strong>true</strong>: The customer’s subscription is in an introductory price period
         /// <strong>false</strong>: The subscription is not in an introductory price period.
@@ -53,7 +53,7 @@ namespace Iap.Verify.Models
 
         /// <summary>
         /// An indicator of whether an auto-renewable subscription is in the free trial period.
-        /// 
+        ///
         /// Possible values,
         /// <strong>true</strong>: The subscription is in the free trial period.
         /// <strong>false</strong>: The subscription is not in the free trial period.

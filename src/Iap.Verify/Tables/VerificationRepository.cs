@@ -2,9 +2,6 @@
 using Iap.Verify.Models;
 using Iap.Verify.Tables.Entities;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Iap.Verify.Tables
 {

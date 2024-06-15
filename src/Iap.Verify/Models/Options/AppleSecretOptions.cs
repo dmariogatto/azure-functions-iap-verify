@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-
-namespace Iap.Verify.Models
+﻿namespace Iap.Verify.Models
 {
     public class AppleSecretOptions
     {
@@ -20,26 +16,23 @@ namespace Iap.Verify.Models
                     return;
 
                 _appSpecific = value;
-                Secrets.Clear();
+                _secrets.Clear();
 
                 if (string.IsNullOrWhiteSpace(_appSpecific))
                     return;
 
-                var secretPairs =
+                var pairs =
                     _appSpecific
                         .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                        .Select(i => i.Split(':', StringSplitOptions.RemoveEmptyEntries));
+                        .Select(i => i.Split(':', StringSplitOptions.RemoveEmptyEntries))
+                        .Where(i => i.Length == 2);
 
-                foreach (var pair in secretPairs)
-                {
-                    if (pair.Length == 2)
-                    {
-                        Secrets.Add(pair[0], pair[1]);
-                    }
-                }
+                foreach (var p in pairs)
+                    _secrets.Add(p[0], p[1]);
             }
         }
 
-        public Dictionary<string, string> Secrets { get; } = new Dictionary<string, string>();
+        private readonly Dictionary<string, string> _secrets = new Dictionary<string, string>();
+        public IReadOnlyDictionary<string, string> Secrets => _secrets;
     }
 }

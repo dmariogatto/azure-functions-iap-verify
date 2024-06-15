@@ -1,5 +1,4 @@
-﻿using Newtonsoft.Json;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace Iap.Verify.Models
 {
@@ -19,7 +18,6 @@ namespace Iap.Verify.Models
         /// An indicator that an error occurred during the request. A value of 1 indicates a temporary issue; retry validation for this receipt at a later time.
         /// A value of 0 indicates an unresolvable issue; do not retry validation for this receipt. Only applicable to status codes 21100-21199.
         /// </summary>
-        [JsonProperty("is-retryable")]
         public bool IsRetryable { get; set; }
 
         /// <summary>
