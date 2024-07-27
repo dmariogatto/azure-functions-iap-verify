@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -37,14 +36,15 @@ namespace Iap.Verify
         private readonly int _graceDays;
 
         public AppleVerifyTransaction(
+            IOptions<IapOptions> iapOptions,
             IOptions<AppleStoreOptions> storeKeyOptions,
             IHttpClientFactory httpClientFactory,
-            IConfiguration configuration,
             IVerificationRepository verificationRepository,
             ILoggerFactory loggerFactory) : base(verificationRepository)
         {
             _logger = loggerFactory.CreateLogger<AppleVerifyTransaction>();
 
+            _graceDays = iapOptions.Value.GraceDays;
             _storeKeyOptions = storeKeyOptions.Value;
 
             _httpClient = httpClientFactory.CreateClient();
@@ -55,8 +55,6 @@ namespace Iap.Verify
             });
 
             _jwtHandler = new JwtSecurityTokenHandler();
-
-            _ = int.TryParse(configuration[GraceDays], out _graceDays);
         }
 
         [Function(nameof(AppleVerifyTransaction))]
