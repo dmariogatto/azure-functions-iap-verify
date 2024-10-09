@@ -3,7 +3,6 @@ using Iap.Verify.Tables;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
@@ -26,14 +25,15 @@ namespace Iap.Verify
         private readonly int _graceDays;
 
         public AppleVerifyReceipt(
+            IOptions<IapOptions> iapOptions,
             IOptions<AppleSecretOptions> secretOptions,
             IHttpClientFactory httpClientFactory,
-            IConfiguration configuration,
             IVerificationRepository verificationRepository,
             ILoggerFactory loggerFactory) : base(verificationRepository)
         {
             _logger = loggerFactory.CreateLogger<AppleVerifyReceipt>();
 
+            _graceDays = iapOptions.Value.GraceDays;
             _secretOptions = secretOptions.Value;
 
             _httpClient = httpClientFactory.CreateClient();
@@ -42,8 +42,6 @@ namespace Iap.Verify
             {
                 PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
             });
-
-            _ = int.TryParse(configuration[GraceDays], out _graceDays);
         }
 
         [Function(nameof(AppleVerifyReceipt))]

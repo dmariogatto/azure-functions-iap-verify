@@ -5,8 +5,8 @@ using Iap.Verify.Tables;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using FromBodyAttribute = Microsoft.Azure.Functions.Worker.Http.FromBodyAttribute;
 
 namespace Iap.Verify
@@ -26,17 +26,17 @@ namespace Iap.Verify
         private readonly int _graceDays;
 
         public Google(
+            IOptions<IapOptions> iapOptions,
             AndroidPublisherService googleService,
             IVerificationRepository verificationRepository,
-            IConfiguration configuration,
             ILoggerFactory loggerFactory)
         {
-            _googleService = googleService;
-            _verificationRepository = verificationRepository;
-
             _logger = loggerFactory.CreateLogger<Google>();
 
-            _ = int.TryParse(configuration[GraceDays], out _graceDays);
+            _graceDays = iapOptions.Value.GraceDays;
+
+            _googleService = googleService;
+            _verificationRepository = verificationRepository;
         }
 
         [Function(nameof(Google))]

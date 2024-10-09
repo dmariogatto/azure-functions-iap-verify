@@ -14,7 +14,8 @@ using JsonOptions = Microsoft.AspNetCore.Mvc.JsonOptions;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
-    .ConfigureServices(services => {
+    .ConfigureServices(services =>
+    {
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();
 
@@ -58,6 +59,8 @@ var host = new HostBuilder()
             );
         });
 
+        services.AddOptions<IapOptions>()
+            .Configure<IConfiguration>((settings, config) => config.GetSection(IapOptions.IapKey).Bind(settings));
         services.AddOptions<AppleSecretOptions>()
             .Configure<IConfiguration>((settings, config) => config.GetSection(AppleSecretOptions.AppleSecretStoreKey).Bind(settings));
         services.AddOptions<AppleStoreOptions>()
@@ -66,7 +69,6 @@ var host = new HostBuilder()
             .Configure<IConfiguration>((settings, config) => config.GetSection(GoogleOptions.GoogleKey).Bind(settings));
 
         services.AddHttpClient();
-        services.AddLogging();
 
         services.AddSingleton(services =>
             new TableStorageOptions()
@@ -79,4 +81,3 @@ var host = new HostBuilder()
     .Build();
 
 host.Run();
-
