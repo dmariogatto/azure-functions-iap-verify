@@ -22,7 +22,7 @@
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.1" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.1" />
     <PackageReference Include="Azure.Data.Tables" Version="12.11.0" />
-    <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.73.0.3989" />
+    <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.73.0.4001" />
   </ItemGroup>
   <ItemGroup>
     <None Update="settings.json">
