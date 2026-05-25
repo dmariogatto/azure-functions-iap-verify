@@ -49,15 +49,12 @@ namespace Iap.Verify
 
             if (receipt?.IsValid() == true)
             {
-                var iapTask = GetInAppProductAsync(receipt.BundleId, receipt.ProductId, cancellationToken);
+                var otpTask = GetOneTimeProductAsync(receipt.BundleId, receipt.ProductId, cancellationToken);
                 var subTask = GetSubscriptionAsync(receipt.BundleId, receipt.ProductId, cancellationToken);
 
-                if (await iapTask is not null)
+                if (await otpTask is not null)
                 {
-                    // Support legacy subscriptions
-                    result = string.Equals(iapTask.Result.PurchaseType, "subscription", StringComparison.OrdinalIgnoreCase)
-                        ? await ValidateSubscriptionAsync(receipt, _logger, cancellationToken)
-                        : await ValidateProductAsync(receipt, _logger, cancellationToken);
+                    result = await ValidateProductAsync(receipt, _logger, cancellationToken);
                 }
                 else if (await subTask is not null)
                 {
@@ -226,17 +223,18 @@ namespace Iap.Verify
             return result;
         }
 
-        private async Task<InAppProduct> GetInAppProductAsync(string bundleId, string productId, CancellationToken cancellationToken)
+        private async Task<OneTimeProduct> GetOneTimeProductAsync(string bundleId, string productId, CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(bundleId) || string.IsNullOrEmpty(productId))
                 return null;
 
-            var result = default(InAppProduct);
+            var result = default(OneTimeProduct);
 
             try
             {
                 result = await _googleService
-                    .Inappproducts
+                    .Monetization
+                    .Onetimeproducts
                     .Get(bundleId, productId)
                     .ExecuteAsync(cancellationToken);
             }
