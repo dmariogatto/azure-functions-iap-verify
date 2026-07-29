@@ -155,13 +155,19 @@ namespace Iap.Verify
                     ? EnvironmentType.Unknown
                     : purchase.TestPurchase is not null ? EnvironmentType.Test : EnvironmentType.Production;
 
+                var successfulOrderIds = purchase
+                    ?.LineItems
+                    ?.Where(i => !string.IsNullOrEmpty(i?.LatestSuccessfulOrderId) && i.ExpiryTimeDateTimeOffset.HasValue)
+                    ?.OrderByDescending(i => i.ExpiryTimeDateTimeOffset)
+                    ?.Select(i => i.LatestSuccessfulOrderId) ?? [];
+
                 if (purchase is null)
                 {
                     result = new ValidationResult(false, $"no purchase found");
                 }
-                else if (!purchase.LatestOrderId.StartsWith(receipt.TransactionId, StringComparison.Ordinal))
+                else if (successfulOrderIds.FirstOrDefault(i => i.StartsWith(receipt.TransactionId, StringComparison.Ordinal)) is not string matchedOrderId)
                 {
-                    result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match '{purchase.LatestOrderId}'");
+                    result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match any order ids '{string.Join(", ", successfulOrderIds)}'");
                 }
                 else
                 {
@@ -169,9 +175,10 @@ namespace Iap.Verify
 
                     var startTimeUtc = (purchase.StartTimeDateTimeOffset ?? DateTimeOffset.UnixEpoch).UtcDateTime;
                     // If the order has been cancelled, then expiry time will set to the cancel date
-                    var expiryTimeUtc = purchase.LineItems
+                    var expiryTimeUtc = purchase
+                        ?.LineItems
+                        ?.Where(i => i.ExpiryTimeDateTimeOffset.HasValue)
                         ?.Select(i => i.ExpiryTimeDateTimeOffset)
-                        ?.Where(i => i.HasValue)
                         ?.OrderByDescending(i => i)
                         ?.FirstOrDefault()
                         ?.UtcDateTime;
@@ -198,7 +205,7 @@ namespace Iap.Verify
                         {
                             BundleId = receipt.BundleId,
                             ProductId = receipt.ProductId,
-                            TransactionId = purchase.LatestOrderId,
+                            TransactionId = matchedOrderId,
                             OriginalTransactionId = receipt.TransactionId,
                             PurchaseDateUtc = startTimeUtc,
                             ExpiryUtc = expiryTimeUtc,
