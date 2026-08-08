@@ -167,7 +167,7 @@ namespace Iap.Verify
                 }
                 else if (successfulOrderIds.FirstOrDefault(i => i.StartsWith(receipt.TransactionId, StringComparison.Ordinal)) is not string matchedOrderId)
                 {
-                    result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match any order ids '{string.Join(", ", successfulOrderIds)}'");
+                    result = new ValidationResult(false, $"transaction id '{receipt.TransactionId}' does not match any order ids in ('{string.Join(", ", successfulOrderIds)}')");
                 }
                 else
                 {
@@ -177,7 +177,7 @@ namespace Iap.Verify
                     // If the order has been cancelled, then expiry time will set to the cancel date
                     var expiryTimeUtc = purchase
                         ?.LineItems
-                        ?.Where(i => i.ExpiryTimeDateTimeOffset.HasValue)
+                        ?.Where(i => i?.ExpiryTimeDateTimeOffset is not null)
                         ?.Select(i => i.ExpiryTimeDateTimeOffset)
                         ?.OrderByDescending(i => i)
                         ?.FirstOrDefault()
