@@ -9,7 +9,7 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.ApplicationInsights.WorkerService" Version="3.2.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.13" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.52.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.3.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.1.1" />
@@ -17,7 +17,7 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.OpenTelemetry" Version="1.2.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.1.0" />
     <PackageReference Include="Azure.Data.Tables" Version="12.13.0" />
-    <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.77.0.4284" />
+    <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.77.0.4311" />
   </ItemGroup>
   <ItemGroup>
     <None Update="settings.json">
