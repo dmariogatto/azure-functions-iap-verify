@@ -17,7 +17,7 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.OpenTelemetry" Version="1.2.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.1.0" />
     <PackageReference Include="Azure.Data.Tables" Version="12.13.0" />
-    <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.77.0.4311" />
+    <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.77.0.4312" />
   </ItemGroup>
   <ItemGroup>
     <None Update="settings.json">
